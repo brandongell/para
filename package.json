@@ -1,0 +1,46 @@
+{
+  "name": "legal-document-organizer",
+  "version": "1.0.0",
+  "description": "AI-powered legal document organizer using OpenAI GPT-4o",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "discord": "ts-node src/discord-bot.ts",
+    "watch": "tsc --watch"
+  },
+  "keywords": [
+    "legal",
+    "document",
+    "organizer",
+    "ai",
+    "openai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^20.0.0",
+    "@types/pdf-parse": "^1.1.5",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "canvas": "^3.1.2",
+    "chokidar": "^3.5.3",
+    "discord.js": "^14.0.0",
+    "dotenv": "^16.3.0",
+    "jsdom": "^26.1.0",
+    "mammoth": "^1.6.0",
+    "node-fetch": "^3.3.0",
+    "openai": "^4.0.0",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^1.1.1",
+    "pdf2json": "^3.1.6",
+    "pdf2pic": "^3.2.0",
+    "pdfjs-dist": "^5.3.93",
+    "readline": "^1.3.0",
+    "tesseract.js": "^6.0.1"
+  }
+}
