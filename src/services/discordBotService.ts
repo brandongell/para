@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Message, Attachment, EmbedBuilder, TextBasedChannel } from 'discord.js';
+import { Client, GatewayIntentBits, Message, Attachment, EmbedBuilder, TextBasedChannel, ThreadChannel, ChannelType, ThreadAutoArchiveDuration } from 'discord.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import fetch from 'node-fetch';
@@ -22,6 +22,7 @@ export class DiscordBotService {
   // private templateService: TemplateManagementService | null = null;
   private organizeFolderPath: string;
   private tempDir: string;
+  private activeThreads: Set<string> = new Set();
 
   constructor(
     token: string,
@@ -117,17 +118,23 @@ export class DiscordBotService {
       return;
     }
 
+    // Check if message is in a thread
+    const isInThread = message.channel.isThread();
+    const isActiveThread = isInThread && this.activeThreads.has(message.channel.id);
+    
     // Check if bot should respond to this message
-    const isDM = message.channel.type === 1; // DM channel
+    const isDM = message.channel.type === ChannelType.DM;
     const isMentioned = message.mentions.has(this.client.user!);
     const hasAttachments = message.attachments.size > 0;
 
+    console.log(`🧵 Thread status - In thread: ${isInThread}, Active thread: ${isActiveThread}`);
+
     // Only respond if:
     // 1. It's a DM, OR
-    // 2. Bot is mentioned, OR  
-    // 3. Message has attachments (for file organization)
-    if (!isDM && !isMentioned && !hasAttachments) {
-      console.log(`⏭️ Ignoring message - not mentioned, not DM, no attachments`);
+    // 2. Bot is mentioned (will create thread), OR  
+    // 3. Message is in an active thread
+    if (!isDM && !isMentioned && !isActiveThread) {
+      console.log(`⏭️ Ignoring message - not mentioned, not DM, not in active thread`);
       return;
     }
 
@@ -137,8 +144,10 @@ export class DiscordBotService {
       return;
     }
 
-    console.log(`✅ Processing message - DM: ${isDM}, Mentioned: ${isMentioned}, Attachments: ${hasAttachments}`);
+    console.log(`✅ Processing message - DM: ${isDM}, Mentioned: ${isMentioned}, Active thread: ${isActiveThread}, Attachments: ${hasAttachments}`);
 
+    // Use thread ID for context if in thread, otherwise use user ID
+    const contextId = isInThread ? message.channel.id : message.author.id;
     const userId = message.author.id;
     let messageContent = message.content.trim();
     
@@ -154,14 +163,14 @@ export class DiscordBotService {
       }
 
       // Get conversation context
-      const context = await this.conversationManager.getContext(userId);
+      const context = await this.conversationManager.getContext(contextId);
 
       // Resolve contextual references if we have context
       let resolvedMessage = messageContent;
       let referencedItem = undefined;
       
       if (context && messageContent) {
-        const resolution = await this.conversationManager.resolveContextualReferences(userId, messageContent);
+        const resolution = await this.conversationManager.resolveContextualReferences(contextId, messageContent);
         resolvedMessage = resolution.resolvedMessage;
         referencedItem = resolution.referencedItem;
       }
@@ -283,10 +292,16 @@ Just talk to me naturally - no special commands needed!`,
       }
 
       // Update conversation context
-      await this.conversationManager.updateContext(userId, intent, resolvedMessage || messageContent, results);
+      await this.conversationManager.updateContext(contextId, intent, resolvedMessage || messageContent, results);
 
-      // Send response
-      await this.sendResponse(message, response);
+      // Handle thread creation and response
+      if (isMentioned && !isDM && !isInThread) {
+        // Create a thread when mentioned in a channel
+        await this.createThreadAndRespond(message, response, intent);
+      } else {
+        // Send response normally (in DM, existing thread, or if already in thread)
+        await this.sendResponse(message, response);
+      }
 
     } catch (error) {
       console.error('❌ Error handling message:', error);
@@ -378,8 +393,10 @@ Just talk to me naturally - no special commands needed!`,
               { name: 'Confidence', value: `${Math.round(classification.confidence * 100)}%`, inline: true }
             );
             
-          if ('send' in message.channel) {
-            await message.channel.send({ embeds: [embed] });
+          // Send to thread if in thread, otherwise to channel
+          const targetChannel = message.channel.isThread() ? message.channel : message.channel;
+          if ('send' in targetChannel) {
+            await targetChannel.send({ embeds: [embed] });
           }
         }
         
@@ -499,6 +516,98 @@ Just talk to me naturally - no special commands needed!`,
     }
     
     return chunks;
+  }
+
+  private async createThreadAndRespond(message: Message, response: BotResponse, intent: BotIntent): Promise<void> {
+    try {
+      // Generate thread name based on intent
+      let threadName = `${message.author.username} - `;
+      switch (intent.type) {
+        case 'ORGANIZE_FILES':
+          threadName += 'File Organization';
+          break;
+        case 'SEARCH_DOCUMENTS':
+          threadName += 'Document Search';
+          break;
+        case 'REQUEST_TEMPLATE':
+          threadName += 'Template Request';
+          break;
+        case 'GET_DOCUMENT_INFO':
+          threadName += 'Document Info';
+          break;
+        case 'LIST_DOCUMENTS':
+          threadName += 'Document List';
+          break;
+        case 'GET_STATISTICS':
+          threadName += 'Statistics';
+          break;
+        case 'UPLOAD_TO_DOCUMENSO':
+          threadName += 'Documenso Upload';
+          break;
+        case 'HELP':
+          threadName += 'Help';
+          break;
+        default:
+          threadName += 'Discussion';
+      }
+
+      // Limit thread name length (100 character max)
+      if (threadName.length > 100) {
+        threadName = threadName.substring(0, 97) + '...';
+      }
+
+      console.log(`🧵 Creating thread: ${threadName}`);
+
+      // Create thread from the user's message
+      const thread = await message.startThread({
+        name: threadName,
+        autoArchiveDuration: ThreadAutoArchiveDuration.OneDay,
+        reason: 'Bot was mentioned - starting conversation thread'
+      });
+
+      // Add thread to active threads
+      this.activeThreads.add(thread.id);
+      console.log(`✅ Thread created: ${thread.name} (ID: ${thread.id})`);
+
+      // Send response in the thread
+      await this.sendResponseToThread(thread, response);
+
+      // Update conversation context to use thread ID
+      await this.conversationManager.updateContext(thread.id, intent, message.content, []);
+
+    } catch (error) {
+      console.error('❌ Error creating thread:', error);
+      // Fallback to regular reply if thread creation fails
+      await this.sendResponse(message, response);
+    }
+  }
+
+  private async sendResponseToThread(thread: ThreadChannel, response: BotResponse): Promise<void> {
+    // Show typing indicator in thread
+    await thread.sendTyping();
+
+    // Split long messages if needed
+    const maxLength = 2000;
+    
+    if (response.content.length <= maxLength) {
+      await thread.send(response.content);
+    } else {
+      // Split the message
+      const chunks = this.splitMessage(response.content, maxLength);
+      for (const chunk of chunks) {
+        await thread.send(chunk);
+      }
+    }
+    
+    // Send follow-up suggestions if any
+    if (response.followUpSuggestions && response.followUpSuggestions.length > 0) {
+      const suggestionsText = "💡 **Suggestions:**\n" + 
+        response.followUpSuggestions.map(s => `• ${s}`).join('\n');
+      
+      if (suggestionsText.length <= maxLength) {
+        await thread.send(suggestionsText);
+      }
+    }
   }
 
   async shutdown(): Promise<void> {

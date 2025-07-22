@@ -90,11 +90,24 @@ npm start
 npm run discord
 ```
 
+#### Thread-Based Communication
+The Discord bot uses a thread-based conversation model:
+- **Activation**: Bot only responds when @mentioned (e.g., `@para help`)
+- **Thread Creation**: Automatically creates a thread from your message
+- **Continued Conversation**: In threads, no @ mention needed - just type naturally
+- **Auto-Archive**: Threads archive after 24 hours of inactivity
+- **Clean Channels**: Keeps main channels clutter-free
+
 #### Template Commands
 - "Show me all templates"
 - "I need an employment agreement template"
 - "Find SAFE template"
 - "Get me a blank NDA"
+
+#### File Organization
+- Upload files with `@para organize this` to start a thread
+- Bot processes files and responds with organization details in thread
+- Multiple files are handled with progress updates
 
 #### Documenso Integration
 - "Upload this template to Documenso"
