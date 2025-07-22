@@ -6,9 +6,9 @@ export class DocumentClassifierService {
   private openaiService: OpenAIService;
   private fileReaderService: FileReaderService;
 
-  constructor(openaiApiKey: string) {
+  constructor(openaiApiKey: string, geminiApiKey?: string) {
     this.openaiService = new OpenAIService(openaiApiKey);
-    this.fileReaderService = new FileReaderService();
+    this.fileReaderService = new FileReaderService(geminiApiKey);
   }
 
   async classifyFile(filePath: string): Promise<DocumentClassification> {

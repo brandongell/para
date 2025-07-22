@@ -24,13 +24,14 @@ class LegalDocumentOrganizer {
     try {
       this.cli.displayWelcome();
       
-      // Check for OpenAI API key
+      // Check for API keys
       const apiKey = await this.getOpenAIApiKey();
+      const geminiApiKey = this.getGeminiApiKey();
       
       // Initialize services
-      this.classifier = new DocumentClassifierService(apiKey);
-      this.monitor = new FileMonitorService(apiKey);
-      this.metadataService = new MetadataService(apiKey);
+      this.classifier = new DocumentClassifierService(apiKey, geminiApiKey);
+      this.monitor = new FileMonitorService(apiKey, geminiApiKey);
+      this.metadataService = new MetadataService(apiKey, geminiApiKey);
       
       // Set metadata service in organizer
       this.organizer.setMetadataService(this.metadataService);
@@ -73,6 +74,19 @@ class LegalDocumentOrganizer {
       this.cli.close();
       process.exit(1);
     }
+  }
+
+  private getGeminiApiKey(): string | undefined {
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    
+    if (!geminiApiKey || geminiApiKey.trim() === '' || geminiApiKey === 'PASTE_YOUR_GEMINI_API_KEY_HERE') {
+      this.cli.displayWarning('Gemini API key not found - PDF extraction will not work');
+      this.cli.displayInfo('To enable PDF extraction, add your Gemini API key to the .env file:');
+      this.cli.displayInfo('GEMINI_API_KEY=your_gemini_api_key_here');
+      return undefined;
+    }
+    
+    return geminiApiKey;
   }
 
   private async getOpenAIApiKey(): Promise<string> {

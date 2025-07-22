@@ -1,0 +1,44 @@
+{
+  "filename": "NMM.pdf",
+  "status": "executed",
+  "category": "Investment_Fundraising",
+  "document_type": "SAFE Agreement",
+  "signers": [
+    {
+      "name": "Dan Shipper",
+      "date_signed": "2023-06-15"
+    },
+    {
+      "name": "Nashilu Mouen",
+      "date_signed": "2023-06-15"
+    }
+  ],
+  "primary_parties": [
+    {
+      "name": "Dan Shipper",
+      "organization": "Every Media Inc.",
+      "title": "Chief Executive Officer",
+      "address": "221 Canal Street, Floor 5 New York, NY 10013",
+      "email": "dshipper@gmail.com",
+      "role": "Company"
+    },
+    {
+      "name": "Nashilu Mouen",
+      "organization": "Individual",
+      "address": "123 Investor Lane, City, State 12345",
+      "email": "nashilu@example.com",
+      "role": "Investor"
+    }
+  ],
+  "effective_date": "2023-06-15",
+  "fully_executed_date": "2023-06-15",
+  "governing_law": "Delaware",
+  "counterparty_role": "investor",
+  "amendment_number": "original",
+  "tags": [
+    "SAFE",
+    "investment",
+    "equity"
+  ],
+  "notes": "Extracted using Gemini multimodal analysis - detected both visual signatures"
+}

@@ -12,10 +12,10 @@ export class FileMonitorService {
   private watchPath: string = '';
   private isProcessing: Map<string, boolean> = new Map();
 
-  constructor(openaiApiKey: string) {
-    this.classifier = new DocumentClassifierService(openaiApiKey);
+  constructor(openaiApiKey: string, geminiApiKey?: string) {
+    this.classifier = new DocumentClassifierService(openaiApiKey, geminiApiKey);
     this.organizer = new FileOrganizerService();
-    this.metadataService = new MetadataService(openaiApiKey);
+    this.metadataService = new MetadataService(openaiApiKey, geminiApiKey);
     
     // Set metadata service in organizer
     this.organizer.setMetadataService(this.metadataService);

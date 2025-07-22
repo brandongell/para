@@ -15,11 +15,17 @@ class DiscordBotRunner {
       const token = this.getEnvVar('DISCORD_BOT_TOKEN');
       const openaiApiKey = this.getEnvVar('OPENAI_API_KEY');
       const organizeFolderPath = this.getEnvVar('ORGANIZE_FOLDER_PATH');
+      const geminiApiKey = process.env.GEMINI_API_KEY; // Optional
 
       console.log(`📁 Organization folder: ${organizeFolderPath}`);
+      if (geminiApiKey) {
+        console.log('🔮 Gemini API key found - PDF extraction enabled');
+      } else {
+        console.log('⚠️  Gemini API key not found - PDF extraction will not work');
+      }
 
       // Initialize and start the bot
-      this.botService = new DiscordBotService(token, openaiApiKey, organizeFolderPath);
+      this.botService = new DiscordBotService(token, openaiApiKey, organizeFolderPath, geminiApiKey);
 
       // Set up graceful shutdown
       this.setupGracefulShutdown();

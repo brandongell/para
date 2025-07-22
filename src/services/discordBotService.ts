@@ -24,7 +24,8 @@ export class DiscordBotService {
   constructor(
     token: string,
     openaiApiKey: string,
-    organizeFolderPath: string
+    organizeFolderPath: string,
+    geminiApiKey?: string
   ) {
     this.client = new Client({
       intents: [
@@ -44,9 +45,9 @@ export class DiscordBotService {
     }
 
     // Initialize services
-    this.classifier = new DocumentClassifierService(openaiApiKey);
+    this.classifier = new DocumentClassifierService(openaiApiKey, geminiApiKey);
     this.organizer = new FileOrganizerService();
-    this.metadataService = new MetadataService(openaiApiKey);
+    this.metadataService = new MetadataService(openaiApiKey, geminiApiKey);
     this.nlp = new NaturalLanguageProcessor(openaiApiKey);
     this.conversationManager = new ConversationManager();
     this.searchService = new SmartSearchService(organizeFolderPath);
