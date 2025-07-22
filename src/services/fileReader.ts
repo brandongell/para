@@ -3,6 +3,7 @@ import * as path from 'path';
 import pdfParse from 'pdf-parse';
 import * as mammoth from 'mammoth';
 import { PDFDocument, PDFForm, PDFField } from 'pdf-lib';
+import { GeminiPdfService } from './geminiPdfService';
 import { FileContent } from '../types';
 
 // Type for PDF text field with getText method
@@ -11,6 +12,21 @@ interface PDFTextField extends PDFField {
 }
 
 export class FileReaderService {
+  private geminiService?: GeminiPdfService;
+
+  constructor(geminiApiKey?: string) {
+    if (geminiApiKey) {
+      this.geminiService = new GeminiPdfService(geminiApiKey);
+    }
+  }
+
+  async extractMetadataWithGemini(pdfPath: string) {
+    if (!this.geminiService) {
+      throw new Error('Gemini service not initialized - provide API key in constructor');
+    }
+    
+    return await this.geminiService.extractMetadataFromPdf(pdfPath);
+  }
   
   async readFile(filePath: string): Promise<FileContent> {
     const filename = path.basename(filePath);
