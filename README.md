@@ -6,12 +6,14 @@ An AI-powered legal document organizer that uses **Gemini multimodal AI** and **
 
 - 🔮 **Gemini Multimodal PDF Extraction**: Revolutionary visual signature detection that finds ALL signers in PDFs
 - 🤖 **Dual AI Classification**: Uses OpenAI GPT-4o for document classification and metadata extraction
+- 📝 **Automatic Template Identification**: Intelligently identifies and categorizes template documents
 - 📁 **Structured Organization**: Organizes documents into a 10-folder business function structure
 - 👀 **Real-time Monitoring**: Continuously monitors folders for new files and organizes them instantly
 - 📄 **Advanced PDF Processing**: Detects visual signatures, filled form fields, and annotations
 - 🔄 **Batch Processing**: Can organize large numbers of existing files
 - ⚡ **CLI Interface**: Simple command-line interface for easy use
-- 🤖 **Discord Bot**: Optional Discord integration for document processing
+- 🤖 **Discord Bot**: Natural language document search and template requests
+- 🔗 **Documenso Integration**: Upload templates to Documenso for e-signature workflows
 
 ## 🚀 What Makes This Special
 
@@ -23,6 +25,20 @@ This system uses **Google Gemini's multimodal capabilities** to analyze PDFs vis
 - ✅ **Process annotations**: Stamps, form fields, electronic signatures
 
 **Example Success**: On test document NMM.pdf, traditional extraction found only 1 signer (Dan Shipper), but Gemini finds both signers (Dan Shipper + Nashilu Mouen) with complete contact information.
+
+## 📝 Template Identification
+
+The system automatically identifies template documents using intelligent pattern matching:
+
+- **High Confidence**: Documents with [BLANK], [FORM], (Form), or Template in filename
+- **Medium Confidence**: Generic documents without specific party names
+- **Smart Exclusion**: Won't mark EXECUTED or signed documents as templates
+
+Templates are:
+- Automatically categorized with status: "template"
+- Organized into the 09_Templates folder
+- Searchable via Discord with natural language
+- Tagged with metadata including placeholders and use cases
 
 ## 📦 Installation
 
@@ -50,6 +66,11 @@ GEMINI_API_KEY=your_gemini_api_key_here
 # Optional for Discord bot
 DISCORD_BOT_TOKEN=your_discord_bot_token_here
 ORGANIZE_FOLDER_PATH=/path/to/your/documents
+
+# Optional for Documenso integration
+DOCUMENSO_API_URL=https://api.documenso.com
+DOCUMENSO_API_TOKEN=your_documenso_api_token_here
+DOCUMENSO_APP_URL=https://app.documenso.com
 ```
 
 ## 🎮 Usage
@@ -69,6 +90,18 @@ npm start
 npm run discord
 ```
 
+#### Template Commands
+- "Show me all templates"
+- "I need an employment agreement template"
+- "Find SAFE template"
+- "Get me a blank NDA"
+
+#### Documenso Integration
+- "Upload this template to Documenso"
+- "Show templates not in Documenso"
+- "Upload employment agreement to Documenso"
+- "Get Documenso link for NDA template"
+
 ### Testing PDF Extraction
 ```bash
 # Test Gemini multimodal extraction
@@ -79,6 +112,10 @@ npx ts-node test-simplified-workflow.ts
 
 # Test production workflow
 npx ts-node test-production-workflow.ts
+
+# Test template identification
+npx ts-node test-template-prompt.ts
+npx ts-node test-mnda-form.ts
 ```
 
 ## 📁 Folder Structure
@@ -148,7 +185,28 @@ Each organized document gets a companion `.metadata.json` file with:
   "primary_parties": [...],
   "effective_date": "2023-06-15",
   "contract_value": "$50000",
-  "governing_law": "Delaware"
+  "governing_law": "Delaware",
+  "template_analysis": {
+    "is_template": false,
+    "confidence": "HIGH",
+    "indicators": ["specific party names", "executed"]
+  }
+}
+```
+
+For templates:
+```json
+{
+  "filename": "Employment Agreement [BLANK].pdf",
+  "status": "template",
+  "template_analysis": {
+    "is_template": true,
+    "confidence": "HIGH",
+    "indicators": ["[BLANK] in filename"],
+    "template_type": "Employment Agreement",
+    "field_placeholders": ["[EMPLOYEE NAME]", "[START DATE]", "[SALARY]"],
+    "typical_use_case": "Standard employment agreement for new hires"
+  }
 }
 ```
 

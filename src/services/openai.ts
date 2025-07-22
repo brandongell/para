@@ -11,6 +11,22 @@ export class OpenAIService {
   }
 
   async classifyDocument(content: string, filename: string): Promise<DocumentClassification> {
+    // Check for template indicators in filename FIRST
+    const cleanFilename = filename.replace(/^\d+_/, ''); // Remove timestamp prefix
+    const templateIndicators = ['[BLANK]', '[FORM]', '(Form)', 'Form', 'FORM', 'Template', 'TEMPLATE', '_Form.', '_FORM.'];
+    const isTemplate = templateIndicators.some(indicator => cleanFilename.includes(indicator));
+    
+    if (isTemplate) {
+      console.log(`📋 Detected template based on filename: ${cleanFilename}`);
+      return {
+        primaryFolder: '09_Templates',
+        subfolder: 'By_Category',
+        confidence: 0.95,
+        reasoning: `Filename contains template indicator: ${cleanFilename}`
+      };
+    }
+
+    // Otherwise, proceed with content-based classification
     const systemPrompt = this.buildSystemPrompt();
     const userPrompt = this.buildUserPrompt(content, filename);
 
@@ -100,13 +116,22 @@ EXACT FOLDER STRUCTURE WITH VALID SUBFOLDERS:
 ├── By_Category
 └── Archive_Management
 
+TEMPLATE CLASSIFICATION RULE:
+If the filename contains [BLANK], [FORM], (Form), Form, FORM, Template, TEMPLATE, or similar indicators, classify to:
+→ 09_Templates/By_Category (for specific business categories)
+→ 09_Templates/By_Department (for department-specific templates)
+→ 09_Templates/Template_Management (for template documentation)
+
 CLASSIFICATION EXAMPLES:
 - Certificate of Incorporation → 01_Corporate_and_Governance/Formation_and_Structure
 - Board Consent → 01_Corporate_and_Governance/Board_and_Stockholder_Governance
 - Employment Agreement → 02_People_and_Employment/Employment_Agreements
+- Employment Agreement [BLANK] → 09_Templates/By_Category
 - SAFE Agreement → 03_Finance_and_Investment/Investment_and_Fundraising
+- SAFE Agreement (Form) → 09_Templates/By_Category
 - Stock Option Grant → 02_People_and_Employment/Equity_and_Compensation
 - Merger Agreement → 01_Corporate_and_Governance/Corporate_Transactions
+- Individual Contractor Agreement [BLANK] → 09_Templates/By_Category
 
 RESPONSE FORMAT:
 You must respond with a JSON object containing:
@@ -129,9 +154,13 @@ SUBFOLDER must be exactly one of the subfolders listed under your chosen primary
   }
 
   private buildUserPrompt(content: string, filename: string): string {
+    // Remove timestamp prefix if present (e.g., "1753216040008_MNDA_Form.pdf" -> "MNDA_Form.pdf")
+    const cleanFilename = filename.replace(/^\d+_/, '');
+    
     return `Please classify this legal document:
 
-FILENAME: ${filename}
+FILENAME: ${cleanFilename}
+ORIGINAL FILENAME (if different): ${filename !== cleanFilename ? filename : 'N/A'}
 
 DOCUMENT CONTENT:
 ${content.substring(0, 4000)}${content.length > 4000 ? '...' : ''}
@@ -140,6 +169,11 @@ Analyze the document and provide classification as JSON.`;
   }
 
   async extractMetadata(content: string, filename: string): Promise<DocumentMetadata> {
+    // Check for template indicators in filename FIRST
+    const cleanFilename = filename.replace(/^\d+_/, ''); // Remove timestamp prefix
+    const templateIndicators = ['[BLANK]', '[FORM]', '(Form)', 'Form', 'FORM', 'Template', 'TEMPLATE', '_Form.', '_FORM.'];
+    const isTemplate = templateIndicators.some(indicator => cleanFilename.includes(indicator));
+    
     const systemPrompt = this.buildMetadataSystemPrompt();
     const userPrompt = this.buildMetadataUserPrompt(content, filename);
 
@@ -159,15 +193,84 @@ Analyze the document and provide classification as JSON.`;
         throw new Error('No response from OpenAI');
       }
 
-      return this.parseMetadataResult(result, filename);
+      const metadata = this.parseMetadataResult(result, filename);
+      
+      // Override status if filename indicates template
+      if (isTemplate) {
+        console.log(`📋 Overriding metadata status to 'template' based on filename: ${cleanFilename}`);
+        metadata.status = 'template';
+        metadata.category = 'Templates';
+        if (!metadata.template_analysis) {
+          metadata.template_analysis = {
+            is_template: true,
+            confidence: 'HIGH',
+            indicators: [`Filename contains template indicator: ${cleanFilename}`],
+            template_type: this.extractTemplateType(cleanFilename)
+          };
+        }
+      }
+      
+      return metadata;
     } catch (error) {
       console.error('Error extracting metadata:', error);
       throw error;
     }
   }
+  
+  private extractTemplateType(filename: string): string {
+    // Extract document type from filename
+    if (filename.includes('NDA') || filename.includes('MNDA')) return 'Non-Disclosure Agreement';
+    if (filename.includes('Employment')) return 'Employment Agreement';
+    if (filename.includes('SAFE')) return 'SAFE Agreement';
+    if (filename.includes('Stock') || filename.includes('Option')) return 'Stock Option Agreement';
+    if (filename.includes('Service')) return 'Services Agreement';
+    return 'Legal Document Template';
+  }
 
   private buildMetadataSystemPrompt(): string {
     return `You are a legal document metadata extraction system. Your job is to analyze legal documents and extract structured metadata according to a specific schema.
+
+STEP 1: TEMPLATE IDENTIFICATION (ANALYZE THIS FIRST)
+
+You must first determine if this document is a reusable template. Use the following criteria:
+
+PRIMARY INDICATORS (Strong Template Evidence):
+- Explicit template labels: "Form", "FORM", "Template", "BLANK" in filename
+- Bracketed indicators: [FORM], [BLANK], [TEMPLATE]
+- Parenthetical indicators: (Form), (Template), (Blank)
+
+SECONDARY INDICATORS (Moderate Template Evidence):
+- Generic document names without specific party names
+- Files with placeholder language like "Pro Forma" or "Draft"
+- Documents with blank fields marked as "____________" or "[________]"
+- Placeholder text like "[COMPANY NAME]", "[EMPLOYEE NAME]", "[DATE]"
+
+EXCLUSION CRITERIA (NOT Templates):
+- Specific party names in filename (e.g., "Agreement (John Smith)")
+- "EXECUTED" or "SIGNED" indicators
+- Specific dates or transaction details in filename
+- Legal file numbers or case references
+- "Filed" or "Recorded" indicators
+- Documents with filled-in names, dates, and amounts
+
+TEMPLATE CONFIDENCE LEVELS:
+- HIGH: Explicit template labels in filename or clear placeholder fields
+- MEDIUM: Generic naming without specific parties, some blank fields
+- LOW: Ambiguous cases requiring deeper content analysis
+
+STEP 2: METADATA EXTRACTION
+
+Based on template identification, extract metadata accordingly:
+
+If identified as template (is_template: true):
+- Set status to "template"
+- Skip detailed signer extraction (use empty array for signers)
+- Focus on identifying template type and typical use case
+- Extract placeholder fields found in the document
+- Category should typically be "Templates" unless strong reason otherwise
+
+If NOT a template:
+- Continue with normal metadata extraction as specified below
 
 METADATA SCHEMA - CORE REQUIRED FIELDS:
 
@@ -226,9 +329,34 @@ Each party object should include:
 - role: Party's role in the agreement (e.g., "Company", "Investor", "Employee", "Contractor", "Advisor")
 
 RESPONSE FORMAT:
-You must respond with a JSON object containing all the metadata fields. Example:
+You must respond with a JSON object containing all the metadata fields. 
 
+For templates, include the template_analysis object:
 {
+  "template_analysis": {
+    "is_template": true,
+    "confidence": "HIGH",
+    "indicators": ["[BLANK] in filename", "placeholder fields throughout"],
+    "template_type": "Employment Agreement",
+    "field_placeholders": ["[EMPLOYEE NAME]", "[START DATE]", "[SALARY]", "[TITLE]"],
+    "typical_use_case": "Standard employment agreement for new hires"
+  },
+  "status": "template",
+  "category": "Employment_Agreements",
+  "signers": [],
+  "fully_executed_date": null,
+  "document_type": "Employment Agreement Template",
+  "tags": ["template", "employment", "form"],
+  "notes": "Reusable employment agreement template with standard terms"
+}
+
+For executed documents, omit template_analysis or set is_template to false:
+{
+  "template_analysis": {
+    "is_template": false,
+    "confidence": "HIGH",
+    "indicators": ["specific party names", "filled amounts", "execution date"]
+  },
   "status": "executed",
   "category": "Equity_Compensation", 
   "signers": [
@@ -336,9 +464,13 @@ SIGNATURE EXTRACTION RULES:
     // Clean and enhance content for better AI parsing
     const cleanedContent = this.cleanPdfContent(content);
     
+    // Remove timestamp prefix if present (e.g., "1753216040008_MNDA_Form.pdf" -> "MNDA_Form.pdf")
+    const cleanFilename = filename.replace(/^\d+_/, '');
+    
     return `Please extract metadata from this legal document:
 
-FILENAME: ${filename}
+FILENAME: ${cleanFilename}
+ORIGINAL FILENAME (if different): ${filename !== cleanFilename ? filename : 'N/A'}
 
 DOCUMENT CONTENT:
 ${cleanedContent.length > 8000 ? 
@@ -436,16 +568,35 @@ Analyze the document content carefully and extract all available metadata as JSO
 
       const parsed = JSON.parse(jsonMatch[0]);
       
+      // Parse template analysis if present
+      let templateAnalysis = undefined;
+      if (parsed.template_analysis) {
+        templateAnalysis = {
+          is_template: parsed.template_analysis.is_template || false,
+          confidence: parsed.template_analysis.confidence || 'LOW',
+          indicators: parsed.template_analysis.indicators || [],
+          template_type: parsed.template_analysis.template_type || undefined,
+          field_placeholders: parsed.template_analysis.field_placeholders || undefined,
+          typical_use_case: parsed.template_analysis.typical_use_case || undefined
+        };
+      }
+      
+      // If template analysis indicates it's a template, ensure status is set correctly
+      const status = (templateAnalysis?.is_template === true) ? 'template' : (parsed.status || 'not_executed');
+      
       // Ensure required fields are present with defaults
       return {
         filename: filename,
-        status: parsed.status || 'not_executed',
+        status: status,
         category: parsed.category || 'Other',
         signers: parsed.signers || [],
         fully_executed_date: parsed.fully_executed_date || null,
         document_type: parsed.document_type || undefined,
         primary_parties: this.validatePrimaryParties(parsed.primary_parties),
         effective_date: parsed.effective_date || undefined,
+        
+        // Template analysis
+        template_analysis: templateAnalysis,
         
         // High-priority additional fields
         contract_value: parsed.contract_value || undefined,

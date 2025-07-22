@@ -47,6 +47,16 @@ export interface DocumentMetadata {
   primary_parties?: Party[];
   effective_date?: string | null;
   
+  // Template analysis fields
+  template_analysis?: {
+    is_template: boolean;
+    confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+    indicators: string[];
+    template_type?: string;
+    field_placeholders?: string[];
+    typical_use_case?: string;
+  };
+  
   // High-priority additional fields
   contract_value?: string; // e.g., "$50000", "€25000", "TBD"
   expiration_date?: string | null; // YYYY-MM-DD or "indefinite", "at-will"
@@ -60,6 +70,16 @@ export interface DocumentMetadata {
   confidentiality_level?: string; // e.g., "public", "internal", "confidential"
   approval_required?: string; // e.g., "board_approval", "ceo_approval", "standard_authority"
   
+  // Documenso integration fields
+  documenso?: {
+    document_id?: number;
+    template_id?: string;
+    template_link?: string;
+    status?: 'pending_upload' | 'uploaded' | 'template_created' | 'error';
+    uploaded_at?: string;
+    error_message?: string;
+  };
+  
   // Existing fields
   tags?: string[];
   notes?: string;
@@ -72,10 +92,11 @@ export interface MetadataExtractionResult {
 }
 
 export interface BotIntent {
-  type: 'ORGANIZE_FILES' | 'SEARCH_DOCUMENTS' | 'GET_DOCUMENT_INFO' | 'LIST_DOCUMENTS' | 'GET_STATISTICS' | 'HELP' | 'UNKNOWN';
+  type: 'ORGANIZE_FILES' | 'SEARCH_DOCUMENTS' | 'REQUEST_TEMPLATE' | 'GET_DOCUMENT_INFO' | 'LIST_DOCUMENTS' | 'GET_STATISTICS' | 'HELP' | 'UPLOAD_TO_DOCUMENSO' | 'UNKNOWN';
   confidence: number;
   parameters: {
     document_type?: string;
+    template_type?: string;
     status?: string;
     signer?: string;
     date_range?: {

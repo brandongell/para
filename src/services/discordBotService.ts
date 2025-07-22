@@ -8,6 +8,7 @@ import { MetadataService } from './metadataService';
 import { NaturalLanguageProcessor } from './naturalLanguageProcessor';
 import { ConversationManager } from './conversationManager';
 import { SmartSearchService } from './smartSearchService';
+// import { TemplateManagementService } from './templateManagementService';
 import { BotIntent, BotResponse, SearchResult } from '../types';
 
 export class DiscordBotService {
@@ -18,6 +19,7 @@ export class DiscordBotService {
   private nlp: NaturalLanguageProcessor;
   private conversationManager: ConversationManager;
   private searchService: SmartSearchService;
+  // private templateService: TemplateManagementService | null = null;
   private organizeFolderPath: string;
   private tempDir: string;
 
@@ -25,7 +27,10 @@ export class DiscordBotService {
     token: string,
     openaiApiKey: string,
     organizeFolderPath: string,
-    geminiApiKey?: string
+    geminiApiKey?: string,
+    documensoApiUrl?: string,
+    documensoApiToken?: string,
+    documensoAppUrl?: string
   ) {
     this.client = new Client({
       intents: [
@@ -55,6 +60,21 @@ export class DiscordBotService {
     // Set metadata service in organizer
     this.organizer.setMetadataService(this.metadataService);
 
+    // Initialize template service if Documenso credentials provided
+    // if (documensoApiUrl && documensoApiToken) {
+    //   this.templateService = new TemplateManagementService(
+    //     organizeFolderPath,
+    //     this.metadataService,
+    //     this.searchService,
+    //     documensoApiUrl,
+    //     documensoApiToken,
+    //     documensoAppUrl
+    //   );
+    //   console.log('📄 Documenso template integration enabled');
+    // } else {
+    //   console.log('⚠️  Documenso credentials not provided - template upload features disabled');
+    // }
+
     this.setupEventHandlers(token);
   }
 
@@ -62,25 +82,70 @@ export class DiscordBotService {
     this.client.once('ready', () => {
       console.log(`🤖 Discord bot is ready! Logged in as ${this.client.user?.tag}`);
       console.log(`📁 Organizing documents to: ${this.organizeFolderPath}`);
+      console.log(`🏠 Connected to ${this.client.guilds.cache.size} servers`);
+      this.client.guilds.cache.forEach(guild => {
+        console.log(`  📍 Server: ${guild.name} (${guild.memberCount} members)`);
+      });
     });
 
     this.client.on('messageCreate', async (message) => {
+      console.log(`📥 Raw message event triggered`);
       await this.handleMessage(message);
     });
 
+    this.client.on('error', (error) => {
+      console.error('🚨 Discord client error:', error);
+    });
+
+    this.client.on('warn', (warning) => {
+      console.warn('⚠️ Discord client warning:', warning);
+    });
+
+    console.log('🔐 Logging into Discord...');
     this.client.login(token);
   }
 
   private async handleMessage(message: Message): Promise<void> {
+    console.log(`🔔 Message received from ${message.author.username} (bot: ${message.author.bot})`);
+    console.log(`📝 Message content: "${message.content}"`);
+    console.log(`📎 Attachments: ${message.attachments.size}`);
+    console.log(`📍 Channel type: ${message.channel.type}`);
+    
     // Ignore bot messages
-    if (message.author.bot) return;
+    if (message.author.bot) {
+      console.log(`🤖 Ignoring bot message from ${message.author.username}`);
+      return;
+    }
+
+    // Check if bot should respond to this message
+    const isDM = message.channel.type === 1; // DM channel
+    const isMentioned = message.mentions.has(this.client.user!);
+    const hasAttachments = message.attachments.size > 0;
+
+    // Only respond if:
+    // 1. It's a DM, OR
+    // 2. Bot is mentioned, OR  
+    // 3. Message has attachments (for file organization)
+    if (!isDM && !isMentioned && !hasAttachments) {
+      console.log(`⏭️ Ignoring message - not mentioned, not DM, no attachments`);
+      return;
+    }
 
     // Ignore empty messages without attachments
-    if (!message.content.trim() && message.attachments.size === 0) return;
+    if (!message.content.trim() && message.attachments.size === 0) {
+      console.log(`⏭️ Ignoring empty message without attachments`);
+      return;
+    }
+
+    console.log(`✅ Processing message - DM: ${isDM}, Mentioned: ${isMentioned}, Attachments: ${hasAttachments}`);
 
     const userId = message.author.id;
-    const messageContent = message.content.trim();
-    const hasAttachments = message.attachments.size > 0;
+    let messageContent = message.content.trim();
+    
+    // Remove mention from message content for better NLP processing
+    if (isMentioned) {
+      messageContent = messageContent.replace(/<@!?\d+>/g, '').trim();
+    }
 
     try {
       // Show typing indicator
@@ -131,6 +196,21 @@ export class DiscordBotService {
           response = await this.nlp.generateResponse(intent, { results: searchResults }, context);
           break;
 
+        case 'REQUEST_TEMPLATE':
+          // For template requests, search specifically for templates
+          const templateIntent = {
+            ...intent,
+            type: 'SEARCH_DOCUMENTS' as const,
+            parameters: {
+              ...intent.parameters,
+              status: 'template'
+            }
+          };
+          const templateResults = await this.searchService.searchByNaturalLanguage(templateIntent);
+          results = templateResults.slice(0, 10);
+          response = await this.nlp.generateResponse(intent, { results: templateResults }, context);
+          break;
+
         case 'GET_DOCUMENT_INFO':
           if (referencedItem) {
             // User is asking about a specific item from previous results
@@ -157,24 +237,41 @@ export class DiscordBotService {
           response = await this.nlp.generateResponse(intent, { stats }, context);
           break;
 
+        case 'UPLOAD_TO_DOCUMENSO':
+          // if (!this.templateService) {
+            response = {
+              content: "⚠️ Documenso integration is temporarily disabled for debugging.",
+              followUpSuggestions: ["Search for templates", "Get help"]
+            };
+          // }
+          break;
+
         case 'HELP':
           response = {
             content: `👋 Hi! I'm your legal document assistant. Here's what I can help you with:
 
 📄 **File Organization**: Upload documents and I'll organize them automatically
 🔍 **Document Search**: Ask me to find documents by type, signer, date, or content
+📝 **Template Requests**: Get blank templates for various document types
 📊 **Document Info**: Get detailed information about specific documents
 📈 **Statistics**: View organization stats and summaries
+🔗 **Documenso Integration**: Upload templates to Documenso for e-signatures
 
 **Example commands:**
 • Upload a file and say "Can you organize this contract?"
 • "Find all SAFE agreements that are executed"
+• "I need an employment agreement template"
+• "Show me all available templates"
+• "Get me a blank NDA"
 • "Show me employment documents from 2023"
 • "Tell me about the Bedrock SAFE agreement"
 • "What are our document statistics?"
+• "Upload this template to Documenso"
+• "Show templates not in Documenso"
+• "Upload employment agreement template to Documenso"
 
 Just talk to me naturally - no special commands needed!`,
-            followUpSuggestions: ["Upload a document", "Search for documents", "Get statistics"]
+            followUpSuggestions: ["Upload a document", "Search for templates", "Get statistics"]
           };
           break;
 
@@ -200,23 +297,67 @@ Just talk to me naturally - no special commands needed!`,
   private async handleFileUploads(attachments: Message['attachments'], message: Message): Promise<any[]> {
     const results: any[] = [];
     
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`📎 Processing ${attachments.size} attachment(s)`);
+    console.log(`📁 Target organize folder: ${this.organizeFolderPath}`);
+    console.log(`${'='.repeat(60)}\n`);
+    
     for (const [, attachment] of attachments) {
+      let tempFilePath: string | undefined;
+      
       try {
-        console.log(`📄 Processing attachment: ${attachment.name}`);
+        console.log(`\n--- Processing: ${attachment.name} ---`);
+        console.log(`📄 Original filename: ${attachment.name}`);
+        console.log(`📏 Size: ${attachment.size} bytes`);
         
         // Download the file
-        const tempFilePath = await this.downloadAttachment(attachment);
+        tempFilePath = await this.downloadAttachment(attachment);
+        console.log(`💾 Downloaded to temp: ${tempFilePath}`);
+        console.log(`📝 Temp filename: ${path.basename(tempFilePath)}`);
+        
+        // Verify temp file exists
+        if (!fs.existsSync(tempFilePath)) {
+          throw new Error(`Temp file does not exist after download: ${tempFilePath}`);
+        }
+        console.log(`✅ Temp file verified to exist`);
         
         // Classify the document
+        console.log(`\n🤔 Starting classification...`);
         const classification = await this.classifier.classifyFile(tempFilePath);
+        console.log(`📊 Classification result:`);
+        console.log(`   - Primary: ${classification.primaryFolder}`);
+        console.log(`   - Subfolder: ${classification.subfolder}`);
+        console.log(`   - Confidence: ${classification.confidence}`);
+        console.log(`   - Reasoning: ${classification.reasoning}`);
         
         // Organize the file
+        console.log(`\n📦 Starting organization...`);
         const organizationResult = await this.organizer.organizeFile(
           tempFilePath,
           classification,
           this.organizeFolderPath,
           true // Generate metadata
         );
+        
+        console.log(`📋 Organization result:`);
+        console.log(`   - Success: ${organizationResult.success}`);
+        console.log(`   - Original: ${organizationResult.originalPath}`);
+        console.log(`   - New path: ${organizationResult.newPath}`);
+        console.log(`   - Metadata: ${organizationResult.metadataPath}`);
+        
+        // Verify files were actually moved
+        if (organizationResult.success && organizationResult.newPath) {
+          const fileExists = fs.existsSync(organizationResult.newPath);
+          const metadataExists = organizationResult.metadataPath ? fs.existsSync(organizationResult.metadataPath) : false;
+          
+          console.log(`\n🔍 Verification:`);
+          console.log(`   - File exists at new location: ${fileExists ? '✅' : '❌'}`);
+          console.log(`   - Metadata exists: ${metadataExists ? '✅' : '❌'}`);
+          
+          if (!fileExists) {
+            console.error(`❌ ERROR: File not found at expected location: ${organizationResult.newPath}`);
+          }
+        }
         
         results.push({
           filename: attachment.name,
@@ -243,15 +384,45 @@ Just talk to me naturally - no special commands needed!`,
         }
         
         // Clean up temp file
-        fs.unlinkSync(tempFilePath);
+        try {
+          if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+            console.log(`🗑️  Cleaned up temp file`);
+          }
+        } catch (cleanupError) {
+          console.warn(`⚠️  Failed to clean up temp file:`, cleanupError);
+        }
+        
+        console.log(`\n✅ Completed processing: ${attachment.name}`);
+        console.log(`${'─'.repeat(40)}\n`);
         
       } catch (error) {
-        console.error(`❌ Error processing ${attachment.name}:`, error);
+        console.error(`\n❌ Error processing ${attachment.name}:`, error);
+        
+        // Clean error message for user
+        let errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        
+        // Don't show confusing ENOENT errors about temp files
+        if (errorMessage.includes('ENOENT') && errorMessage.includes('temp/')) {
+          errorMessage = 'File processing error occurred';
+        }
+        
         results.push({
           filename: attachment.name,
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: errorMessage
         });
+        
+        // Try to clean up temp file on error
+        try {
+          if (tempFilePath && fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+          }
+        } catch (cleanupError) {
+          console.warn(`⚠️  Failed to clean up temp file after error:`, cleanupError);
+        }
+        
+        console.log(`${'─'.repeat(40)}\n`);
       }
     }
     

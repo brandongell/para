@@ -43,6 +43,30 @@ export class DocumentClassifierService {
       return classification;
     } catch (error) {
       console.error(`❌ Error classifying file ${filePath}:`, error);
+      
+      // Fallback: Try to classify based on filename alone for templates
+      const filename = require('path').basename(filePath);
+      // Remove timestamp prefix if present (e.g., "1753216040008_MNDA_Form.pdf" -> "MNDA_Form.pdf")
+      const cleanFilename = filename.replace(/^\d+_/, '');
+      const templateIndicators = ['[BLANK]', '[FORM]', '(Form)', 'Form', 'FORM', 'Template', 'TEMPLATE', '_Form.', '_FORM.'];
+      
+      const isTemplate = templateIndicators.some(indicator => cleanFilename.includes(indicator));
+      
+      console.log(`🔍 Template detection fallback:`);
+      console.log(`   - Original filename: ${filename}`);
+      console.log(`   - Clean filename: ${cleanFilename}`);
+      console.log(`   - Is template: ${isTemplate}`);
+      
+      if (isTemplate) {
+        console.log(`📋 Detected template based on filename: ${filename}`);
+        return {
+          primaryFolder: '09_Templates',
+          subfolder: 'By_Category',
+          confidence: 0.8,
+          reasoning: `Classified as template based on filename containing template indicator`
+        };
+      }
+      
       return this.getDefaultClassification(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

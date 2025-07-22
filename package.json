@@ -9,7 +9,10 @@
     "dev": "ts-node src/index.ts",
     "discord": "ts-node src/discord-bot.ts",
     "oauth-server": "ts-node src/oauth-callback-server.ts",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "system": "./start.sh",
+    "overmind": "overmind start",
+    "stop": "overmind kill"
   },
   "keywords": [
     "legal",
@@ -28,10 +31,12 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@types/express": "^5.0.3",
+    "@types/form-data": "^2.2.1",
     "chokidar": "^3.5.3",
     "discord.js": "^14.0.0",
     "dotenv": "^16.3.0",
     "express": "^5.1.0",
+    "form-data": "^4.0.4",
     "mammoth": "^1.6.0",
     "node-fetch": "^3.3.0",
     "openai": "^4.0.0"

@@ -85,10 +85,12 @@ export class NaturalLanguageProcessor {
 POSSIBLE INTENTS:
 1. ORGANIZE_FILES - User wants to organize attached files or is uploading files
 2. SEARCH_DOCUMENTS - User wants to find specific documents
-3. GET_DOCUMENT_INFO - User wants details about a specific document
-4. LIST_DOCUMENTS - User wants to see documents by category/status
-5. GET_STATISTICS - User wants organizational stats or summaries
-6. HELP - User needs assistance or asks how to use the system
+3. REQUEST_TEMPLATE - User specifically wants templates or blank forms
+4. GET_DOCUMENT_INFO - User wants details about a specific document
+5. LIST_DOCUMENTS - User wants to see documents by category/status
+6. GET_STATISTICS - User wants organizational stats or summaries
+7. HELP - User needs assistance or asks how to use the system
+8. UPLOAD_TO_DOCUMENSO - User wants to upload templates to Documenso for e-signatures
 
 PARAMETER EXTRACTION:
 For each intent, extract relevant parameters:
@@ -102,6 +104,17 @@ SEARCH_DOCUMENTS parameters:
 - category: corporate, employment, investment, etc.
 - query: The natural language search query
 
+REQUEST_TEMPLATE parameters:
+- template_type: employment, SAFE, NDA, service agreement, stock option, etc.
+- category: Business category if specified
+
+Template request indicators:
+- "template", "form", "blank", "reusable"
+- "I need a template for..."
+- "Show me templates"
+- "Find [type] template"
+- "Get me a blank [document type]"
+
 GET_DOCUMENT_INFO parameters:
 - filename: Specific document name mentioned
 
@@ -109,6 +122,17 @@ LIST_DOCUMENTS parameters:
 - document_type: Type to filter by
 - status: Status to filter by
 - category: Category to filter by
+
+UPLOAD_TO_DOCUMENSO parameters:
+- filename: Specific document/template name to upload
+- template_type: Type of template if specified
+
+Documenso upload indicators:
+- "upload to documenso", "send to documenso", "create documenso template"
+- "documenso link", "get documenso link"
+- "upload template", "upload this template"
+- "templates not in documenso", "show unuploaded templates"
+- "make this a signing template"
 
 CONTEXT AWARENESS:
 - If user has previous search results, they might be asking follow-up questions
@@ -133,7 +157,10 @@ EXAMPLES:
 "Tell me about that Bedrock SAFE agreement" → GET_DOCUMENT_INFO
 "What's our document stats?" → GET_STATISTICS
 "How do I use this?" → HELP
-"Tell me more about the first one" (with context) → GET_DOCUMENT_INFO`;
+"Tell me more about the first one" (with context) → GET_DOCUMENT_INFO
+"Upload this template to Documenso" → UPLOAD_TO_DOCUMENSO
+"Show templates not in Documenso" → UPLOAD_TO_DOCUMENSO
+"Get Documenso link for employment agreement" → UPLOAD_TO_DOCUMENSO`;
   }
 
   private buildIntentUserPrompt(
@@ -166,11 +193,15 @@ PERSONALITY:
 
 RESPONSE GUIDELINES:
 
-For ORGANIZE_FILES success:
-- Celebrate successful organization
-- Show where the file was placed
-- Highlight key metadata (status, signers, dates)
-- Offer to show more details
+For ORGANIZE_FILES results:
+- For single file: Show clear success/failure without mentioning "other instances"
+- For successful files: Celebrate and show where placed with full path
+- For failed files: Explain the specific error clearly
+- Handle mixed success/failure gracefully for multiple files only
+- Show key metadata (status, signers, dates) for successful files
+- Be clear about what succeeded vs what failed
+- NEVER mention "another instance" or "second instance" unless there are actually multiple files
+- If only one file was uploaded, give a simple success or failure message
 
 For SEARCH_DOCUMENTS results:
 - Present results in an organized, scannable format

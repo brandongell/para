@@ -98,24 +98,25 @@ export class FileOrganizerService {
       // Handle duplicate filenames
       const finalTargetPath = await this.handleDuplicateFilename(targetFilePath);
       
-      // Move the file
-      await this.moveFile(filePath, finalTargetPath);
-      
-      console.log(`📁 Moved: ${filename} → ${path.relative(targetRootPath, finalTargetPath)}`);
-      
       let metadataPath: string | undefined;
       
-      // Generate metadata if requested and service is available
+      // Generate metadata BEFORE moving the file
       if (generateMetadata && this.metadataService) {
         try {
-          const metadataResult = await this.metadataService.generateMetadataForOrganizedFile(
-            filePath, 
-            finalTargetPath
-          );
+          // Generate metadata while file is still at original location
+          const metadataResult = await this.metadataService.generateMetadataFile(filePath);
           
           if (metadataResult.success) {
-            metadataPath = this.metadataService.getMetadataPath(finalTargetPath);
-            console.log(`📋 Metadata created: ${path.basename(metadataPath)}`);
+            // Calculate where the metadata file should go
+            const targetMetadataPath = `${finalTargetPath}.metadata.json`;
+            const sourceMetadataPath = `${filePath}.metadata.json`;
+            
+            // Move metadata file to target location
+            if (fs.existsSync(sourceMetadataPath)) {
+              await this.moveFile(sourceMetadataPath, targetMetadataPath);
+              metadataPath = targetMetadataPath;
+              console.log(`📋 Metadata created and moved: ${path.basename(metadataPath)}`);
+            }
           } else {
             console.warn(`⚠️  Failed to generate metadata: ${metadataResult.error}`);
           }
@@ -123,6 +124,13 @@ export class FileOrganizerService {
           console.warn(`⚠️  Metadata generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
+      
+      // Now move the main file
+      console.log(`\n📁 Moving main file...`);
+      await this.moveFile(filePath, finalTargetPath);
+      
+      console.log(`✅ Successfully organized: ${filename}`);
+      console.log(`   📍 Final location: ${path.relative(targetRootPath, finalTargetPath)}`)
       
       return {
         success: true,
@@ -188,11 +196,40 @@ export class FileOrganizerService {
   }
 
   private async moveFile(sourcePath: string, targetPath: string): Promise<void> {
+    console.log(`\n🚚 Attempting to move file:`);
+    console.log(`   From: ${sourcePath}`);
+    console.log(`   To: ${targetPath}`);
+    
+    // Check if source exists
+    if (!fs.existsSync(sourcePath)) {
+      console.error(`❌ Source file does not exist: ${sourcePath}`);
+      throw new Error(`Source file does not exist: ${sourcePath}`);
+    }
+    console.log(`   ✅ Source file exists`);
+    
+    // Check if target directory exists
+    const targetDir = require('path').dirname(targetPath);
+    if (!fs.existsSync(targetDir)) {
+      console.error(`❌ Target directory does not exist: ${targetDir}`);
+      throw new Error(`Target directory does not exist: ${targetDir}`);
+    }
+    console.log(`   ✅ Target directory exists`);
+    
     return new Promise((resolve, reject) => {
       fs.rename(sourcePath, targetPath, (error) => {
         if (error) {
+          console.error(`❌ Move failed:`, error);
           reject(error);
         } else {
+          console.log(`   ✅ File moved successfully`);
+          
+          // Double-check the move
+          const movedExists = fs.existsSync(targetPath);
+          const sourceGone = !fs.existsSync(sourcePath);
+          console.log(`   📍 Post-move verification:`);
+          console.log(`      - File at target: ${movedExists ? '✅' : '❌'}`);
+          console.log(`      - Source removed: ${sourceGone ? '✅' : '❌'}`);
+          
           resolve();
         }
       });
