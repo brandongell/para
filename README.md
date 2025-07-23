@@ -6,6 +6,7 @@ An AI-powered legal document organizer that uses **Gemini multimodal AI** and **
 
 - 🔮 **Gemini Multimodal PDF Extraction**: Revolutionary visual signature detection that finds ALL signers in PDFs
 - 🤖 **Dual AI Classification**: Uses OpenAI GPT-4o for document classification and metadata extraction
+- 🧠 **Memory System**: Pre-indexes information for instant answers to business questions
 - 📝 **Automatic Template Identification**: Intelligently identifies and categorizes template documents
 - 📁 **Structured Organization**: Organizes documents into a 10-folder business function structure
 - 👀 **Real-time Monitoring**: Continuously monitors folders for new files and organizes them instantly
@@ -25,6 +26,18 @@ This system uses **Google Gemini's multimodal capabilities** to analyze PDFs vis
 - ✅ **Process annotations**: Stamps, form fields, electronic signatures
 
 **Example Success**: On test document NMM.pdf, traditional extraction found only 1 signer (Dan Shipper), but Gemini finds both signers (Dan Shipper + Nashilu Mouen) with complete contact information.
+
+## 🧠 Memory System
+
+The memory system pre-indexes all document information into aggregated markdown files for instant retrieval:
+
+- **Company Information**: EIN, addresses, formation details, milestones
+- **People Directory**: Employees, contractors, advisors, investors with contact info
+- **Financial Summary**: Total capital raised ($1.8M+), investment rounds, SAFE agreements
+- **Revenue & Sales**: Customer contracts, revenue streams, partnerships
+- **Key Dates**: Contract expirations, renewal deadlines, vesting schedules
+
+Memory files are automatically updated when new documents are added and enable instant answers via Discord.
 
 ## 📝 Template Identification
 
@@ -84,6 +97,19 @@ npm run dev
 npm run build
 npm start
 ```
+
+### Memory System
+```bash
+# Refresh memory files from all documents
+npm run refresh-memory
+```
+
+The memory system creates pre-indexed markdown files that enable instant answers to questions like:
+- "What is our EIN number?"
+- "How much revenue do we have?"
+- "Who are our investors?"
+- "What contracts expire this month?"
+- "Who are our key partners?"
 
 ### Discord Bot
 ```bash

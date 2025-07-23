@@ -3,12 +3,14 @@ import * as path from 'path';
 import { DocumentClassifierService } from './documentClassifier';
 import { FileOrganizerService } from './fileOrganizer';
 import { MetadataService } from './metadataService';
+import { MemoryService } from './memoryService';
 
 export class FileMonitorService {
   private watcher: chokidar.FSWatcher | null = null;
   private classifier: DocumentClassifierService;
   private organizer: FileOrganizerService;
   private metadataService: MetadataService;
+  private memoryService: MemoryService | null = null;
   private watchPath: string = '';
   private isProcessing: Map<string, boolean> = new Map();
 
@@ -24,8 +26,12 @@ export class FileMonitorService {
   async startMonitoring(folderPath: string): Promise<void> {
     this.watchPath = folderPath;
     
+    // Initialize memory service
+    this.memoryService = new MemoryService(folderPath);
+    
     console.log(`\n👀 Starting file monitoring for: ${folderPath}`);
     console.log('📝 Watching for new files to organize automatically...');
+    console.log('🧠 Memory system enabled for quick information retrieval');
     console.log('⏹️  Press Ctrl+C to stop monitoring\n');
 
     // Configure watcher options
@@ -102,6 +108,21 @@ export class FileMonitorService {
         console.log(`🎉 Successfully organized: ${filename}`);
         if (result.metadataPath) {
           console.log(`📋 Metadata created: ${path.basename(result.metadataPath)}`);
+          
+          // Update memory with new document
+          if (this.memoryService) {
+            try {
+              const fs = require('fs');
+              const metadataContent = fs.readFileSync(result.metadataPath, 'utf-8');
+              const metadata = JSON.parse(metadataContent);
+              
+              console.log(`🧠 Updating memory with new document...`);
+              await this.memoryService.updateMemoryForDocument(result.newPath!, metadata);
+              console.log(`✅ Memory updated successfully`);
+            } catch (error) {
+              console.error(`⚠️  Failed to update memory:`, error);
+            }
+          }
         }
       } else {
         console.log(`❌ Failed to organize: ${filename} - ${result.error}`);

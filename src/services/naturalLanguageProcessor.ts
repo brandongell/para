@@ -104,6 +104,13 @@ SEARCH_DOCUMENTS parameters:
 - category: corporate, employment, investment, etc.
 - query: The natural language search query
 
+FACT-BASED QUERIES (still use SEARCH_DOCUMENTS intent):
+- "What is our EIN?" → query: "EIN number"
+- "How much revenue do we have?" → query: "revenue"
+- "Who are our investors?" → query: "investors"
+- "What's our address?" → query: "company address"
+- "How much did [investor] invest?" → query: "[investor] investment amount"
+
 REQUEST_TEMPLATE parameters:
 - template_type: employment, SAFE, NDA, service agreement, stock option, etc.
 - category: Business category if specified
@@ -160,7 +167,10 @@ EXAMPLES:
 "Tell me more about the first one" (with context) → GET_DOCUMENT_INFO
 "Upload this template to Documenso" → UPLOAD_TO_DOCUMENSO
 "Show templates not in Documenso" → UPLOAD_TO_DOCUMENSO
-"Get Documenso link for employment agreement" → UPLOAD_TO_DOCUMENSO`;
+"Get Documenso link for employment agreement" → UPLOAD_TO_DOCUMENSO
+"What is our EIN number?" → SEARCH_DOCUMENTS (query: "EIN number")
+"How much revenue do we have?" → SEARCH_DOCUMENTS (query: "revenue")
+"Who invested in our company?" → SEARCH_DOCUMENTS (query: "investors")`;
   }
 
   private buildIntentUserPrompt(
@@ -204,6 +214,8 @@ For ORGANIZE_FILES results:
 - If only one file was uploaded, give a simple success or failure message
 
 For SEARCH_DOCUMENTS results:
+- If result includes notes field with memory answer, present that FIRST and prominently
+- For memory/fact-based queries (EIN, revenue, etc.), highlight the answer clearly
 - Present results in an organized, scannable format
 - Use bullet points or numbered lists
 - Show most relevant information first

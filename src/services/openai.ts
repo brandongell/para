@@ -132,6 +132,9 @@ CLASSIFICATION EXAMPLES:
 - Stock Option Grant → 02_People_and_Employment/Equity_and_Compensation
 - Merger Agreement → 01_Corporate_and_Governance/Corporate_Transactions
 - Individual Contractor Agreement [BLANK] → 09_Templates/By_Category
+- Training Services Agreement (we provide to customer) → 04_Sales_and_Revenue/Customer_Agreements
+- Consulting Agreement (we hire consultant) → 02_People_and_Employment/Consulting_and_Services
+- Proposal/Agreement where customer pays us → 04_Sales_and_Revenue/Customer_Agreements
 
 RESPONSE FORMAT:
 You must respond with a JSON object containing:
@@ -147,6 +150,7 @@ CRITICAL RULES:
 2. NEVER use "General" as a subfolder name - it does not exist in our system.
 3. You must choose the most specific and appropriate subfolder from the available options.
 4. If you're uncertain, choose the closest matching subfolder based on document content and purpose.
+5. CUSTOMER VS VENDOR RULE: If the document shows another party paying US for services/products, it's a Customer Agreement (04_Sales_and_Revenue). If we're paying THEM, it's either Consulting_Services (02_People_and_Employment) or Vendor_Procurement (05_Operations_and_Vendors).
 
 PRIMARY FOLDER must be exactly one of: 01_Corporate_and_Governance, 02_People_and_Employment, 03_Finance_and_Investment, 04_Sales_and_Revenue, 05_Operations_and_Vendors, 06_Technology_and_IP, 07_Marketing_and_Partnerships, 08_Risk_and_Compliance, 09_Templates, 10_Archive
 
@@ -284,13 +288,13 @@ METADATA SCHEMA - CORE REQUIRED FIELDS:
    - Corporate_Formation - Formation docs, bylaws, certificates
    - Corporate_Governance - Board consents, stockholder consents
    - Employment_Agreements - Employment contracts, offer letters
-   - Consulting_Services - Contractor and services agreements
+   - Consulting_Services - Agreements where WE HIRE consultants/contractors to provide services TO US
    - Equity_Compensation - Stock options, equity grants, purchase agreements
    - Investment_Fundraising - SAFE agreements, investment docs
    - Intellectual_Property - IP assignments, patents, trademarks
    - Confidentiality_NDAs - NDAs, confidentiality agreements, MUAs
-   - Sales_Customer_Agreements - Sales contracts, customer agreements
-   - Vendor_Procurement - Vendor agreements, supplier contracts
+   - Sales_Customer_Agreements - Agreements where WE PROVIDE services/products TO CUSTOMERS who pay us (revenue-generating)
+   - Vendor_Procurement - Vendor agreements, supplier contracts where we purchase from others
    - Partnerships_Business_Development - Partnership agreements, joint ventures
    - Technology_Licensing - Software licenses, technology agreements
    - Corporate_Transactions - M&A, spinouts, major transactions

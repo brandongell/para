@@ -1,18 +1,56 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { BotIntent, SearchResult, DocumentMetadata } from '../types';
+import { MemoryService } from './memoryService';
 
 export class SmartSearchService {
   private organizedFolderPath: string;
+  private memoryService: MemoryService;
 
   constructor(organizedFolderPath: string) {
     this.organizedFolderPath = organizedFolderPath;
+    this.memoryService = new MemoryService(organizedFolderPath);
   }
 
   async searchByNaturalLanguage(intent: BotIntent): Promise<SearchResult[]> {
     console.log(`🔍 Performing search with intent: ${intent.type}`);
     console.log(`📋 Parameters:`, intent.parameters);
 
+    // Check memory first for quick answers if query is provided
+    if (intent.parameters.query) {
+      console.log(`🧠 Checking memory for quick answer...`);
+      const memoryResult = await this.memoryService.queryMemory(intent.parameters.query);
+      
+      if (memoryResult) {
+        console.log(`✅ Found answer in memory!`);
+        // Create a single memory result with the answer
+        const memorySearchResult: SearchResult = {
+          filename: 'Memory Search Result',
+          path: 'memory',
+          metadata: {
+            filename: 'Memory Search Result',
+            status: 'executed' as const,
+            category: 'Memory',
+            signers: [],
+            fully_executed_date: null,
+            notes: memoryResult.answer,
+            tags: memoryResult.sources
+          },
+          relevanceScore: 1.0
+        };
+        
+        // Continue with regular search to find more details
+        // but return memory result first
+        const regularResults = await this.performRegularSearch(intent);
+        return [memorySearchResult, ...regularResults];
+      }
+    }
+
+    // If no memory match, perform regular search
+    return await this.performRegularSearch(intent);
+  }
+
+  private async performRegularSearch(intent: BotIntent): Promise<SearchResult[]> {
     // Get all documents in the organized folders
     const allDocuments = await this.getAllOrganizedDocuments();
     
@@ -322,5 +360,20 @@ export class SmartSearchService {
     const relativePath = path.relative(this.organizedFolderPath, filePath);
     const parts = relativePath.split(path.sep);
     return parts.length > 0 ? parts[0] : null;
+  }
+
+  /**
+   * Refresh all memory files
+   */
+  async refreshMemory(): Promise<void> {
+    console.log('🧠 Refreshing memory files...');
+    await this.memoryService.refreshAllMemory();
+  }
+
+  /**
+   * Get quick answer from memory
+   */
+  async getQuickAnswer(query: string): Promise<{ answer: string; sources: string[] } | null> {
+    return await this.memoryService.queryMemory(query);
   }
 }

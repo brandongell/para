@@ -12,7 +12,8 @@
     "watch": "tsc --watch",
     "system": "./start.sh",
     "overmind": "overmind start",
-    "stop": "overmind kill"
+    "stop": "overmind kill",
+    "refresh-memory": "ts-node refresh-memory.ts"
   },
   "keywords": [
     "legal",
