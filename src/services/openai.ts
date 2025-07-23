@@ -461,7 +461,73 @@ SIGNATURE EXTRACTION RULES:
 - For individual signatures: name = individual, organization = their company if mentioned
 - If signature date is missing but document is executed, use null for date_signed
 - Count each complete signature block as a separate signer
-- Apply special case rules for documents with known missing signature text`;
+- Apply special case rules for documents with known missing signature text
+
+CRITICAL FACTS EXTRACTION:
+You MUST extract critical facts based on the document type. These are key pieces of information that users will search for later.
+
+1. First identify the document type and purpose
+2. Based on the document type, extract the appropriate critical facts into the critical_facts object
+3. Use snake_case for all keys (e.g., ein_number, not "EIN Number")
+4. Extract numeric values without currency symbols when appropriate
+5. Format dates as YYYY-MM-DD
+
+EXAMPLES BY DOCUMENT TYPE:
+
+TAX DOCUMENTS:
+- EIN Confirmation Letter → ein_number (look for "Employer Identification Number:" followed by XX-XXXXXXX), entity_name, responsible_party, issue_date (look for "Date of this notice:")
+- State Tax Registration → state_tax_id, registration_state, tax_types, filing_frequency
+- Tax Returns → tax_year, taxable_income, taxes_paid, filing_status
+
+EMPLOYMENT AGREEMENTS:
+- Employment Agreement → employee_name, title, salary, start_date, reporting_to, equity_grant
+- Offer Letter → position, base_salary, signing_bonus, benefits_summary, probation_period
+- Contractor Agreement → contractor_name, hourly_rate, project_scope, deliverables, term_end_date
+
+INVESTMENT DOCUMENTS:
+- SAFE Agreement → investor_name, investment_amount, valuation_cap, discount_rate, mfn_provision
+- Series A Agreement → lead_investor, round_size, pre_money_valuation, board_seats, liquidation_preference
+- Convertible Note → principal_amount, interest_rate, maturity_date, conversion_discount
+
+CORPORATE FORMATION:
+- Certificate of Incorporation → entity_name, state_of_incorporation, incorporation_date, authorized_shares, entity_number
+- Operating Agreement → membership_units, voting_thresholds, management_structure
+- Bylaws → officer_positions, quorum_requirements, fiscal_year_end
+
+VENDOR/CUSTOMER AGREEMENTS:
+- Customer Agreement → customer_name, contract_value, payment_terms, renewal_date, services_provided
+- Vendor Agreement → vendor_name, monthly_cost, service_level, termination_notice
+- SaaS Agreement → subscription_fee, user_licenses, data_retention_period
+
+REAL ESTATE:
+- Office Lease → landlord, monthly_rent, lease_term, square_footage, address, security_deposit
+- Sublease → sublessor, sublease_rent, term_end_date, permitted_use
+
+INTELLECTUAL PROPERTY:
+- Patent Assignment → patent_numbers, assignor, assignment_date, consideration
+- Trademark Application → mark_name, class_codes, filing_date, serial_number
+- IP License → licensee, royalty_rate, territory, field_of_use
+
+INSURANCE:
+- Insurance Policy → policy_number, coverage_amount, deductible, policy_period, carrier, premium
+
+COMPLIANCE/LEGAL:
+- Settlement Agreement → settlement_amount, release_scope, confidentiality_terms
+- Regulatory Filing → agency, filing_type, submission_date, compliance_period
+
+IMPORTANT: Extract ALL relevant critical facts for the document type. The examples above are not exhaustive - use your judgment to identify what information would be most valuable to preserve and search for later.
+
+SPECIAL PATTERNS TO LOOK FOR:
+- EIN numbers: Look for "Employer Identification Number:" or "EIN" followed by a pattern like XX-XXXXXXX (e.g., 85-0989775)
+- Tax IDs: Look for patterns matching federal or state tax identification numbers
+- Policy numbers: Often appear after "Policy Number:" or "Policy #"
+- Entity numbers: Look for state entity/registration numbers
+
+DO NOT INCLUDE:
+- Bank account numbers or routing numbers
+- Social security numbers
+- Credit card information
+- Other sensitive financial account details`;
   }
 
   private buildMetadataUserPrompt(content: string, filename: string): string {
@@ -615,6 +681,9 @@ Analyze the document content carefully and extract all available metadata as JSO
         confidentiality_level: parsed.confidentiality_level || undefined,
         approval_required: parsed.approval_required || undefined,
         
+        // Critical facts
+        critical_facts: parsed.critical_facts || undefined,
+        
         // Existing fields
         tags: parsed.tags || undefined,
         notes: parsed.notes || undefined
@@ -658,6 +727,29 @@ Analyze the document content carefully and extract all available metadata as JSO
         confidence: 0.1,
         reasoning: 'Failed to parse AI response - using default'
       };
+    }
+  }
+
+  async generateText(prompt: string): Promise<string> {
+    try {
+      const response = await this.client.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 2000,
+      });
+
+      const result = response.choices[0]?.message?.content;
+      if (!result) {
+        throw new Error('No response from OpenAI');
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error generating text:', error);
+      throw error;
     }
   }
 }
