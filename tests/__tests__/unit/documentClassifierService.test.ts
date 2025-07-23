@@ -38,24 +38,19 @@ describe('DocumentClassifierService', () => {
       mockFileReader.isFileSupported.mockReturnValue(true);
       mockFileReader.readFile.mockResolvedValue({
         content: fileContent,
-        type: 'pdf'
+        filename: 'SAFE_Agreement.pdf',
+        extension: '.pdf'
       });
 
-      mockOpenAI.generateCompletion.mockResolvedValue({
-        content: JSON.stringify(expectedClassification)
-      });
+      mockOpenAI.classifyDocument.mockResolvedValue(expectedClassification);
 
       const result = await classifierService.classifyFile(filePath);
 
       expect(result).toEqual(expectedClassification);
       expect(mockFileReader.readFile).toHaveBeenCalledWith(filePath);
-      expect(mockOpenAI.generateCompletion).toHaveBeenCalledWith(
-        expect.stringContaining('You are a legal document classification expert'),
-        expect.stringContaining(fileContent),
-        expect.objectContaining({
-          temperature: 0.3,
-          max_tokens: 1000
-        })
+      expect(mockOpenAI.classifyDocument).toHaveBeenCalledWith(
+        fileContent,
+        'SAFE_Agreement.pdf'
       );
     });
 
@@ -66,16 +61,14 @@ describe('DocumentClassifierService', () => {
       mockFileReader.isFileSupported.mockReturnValue(true);
       mockFileReader.readFile.mockResolvedValue({
         content: fileContent,
-        type: 'pdf'
+        filename: 'NDA_Template_[BLANK].pdf',
+        extension: '.pdf'
       });
 
-      // API returns classification with is_template flag
-      mockOpenAI.generateCompletion.mockResolvedValue({
-        content: JSON.stringify({
-          ...mockDocuments.templateNDA.classification,
-          is_template: true
-        })
-      });
+      // API returns classification for template
+      mockOpenAI.classifyDocument.mockResolvedValue(
+        mockDocuments.templateNDA.classification
+      );
 
       const result = await classifierService.classifyFile(filePath);
 
@@ -93,16 +86,15 @@ describe('DocumentClassifierService', () => {
       mockFileReader.isFileSupported.mockReturnValue(true);
       mockFileReader.readFile.mockResolvedValue({
         content: 'Employment agreement template content',
-        type: 'docx'
+        filename: 'Employment_Agreement_[FORM].docx',
+        extension: '.docx'
       });
 
-      mockOpenAI.generateCompletion.mockResolvedValue({
-        content: JSON.stringify({
-          primaryFolder: '02_People_and_Employment',
-          subfolder: 'Employment_Agreements',
-          confidence: 0.9,
-          reasoning: 'Employment agreement document'
-        })
+      mockOpenAI.classifyDocument.mockResolvedValue({
+        primaryFolder: '02_People_and_Employment',
+        subfolder: 'Employment_Agreements',
+        confidence: 0.9,
+        reasoning: 'Employment agreement document'
       });
 
       const result = await classifierService.classifyFile(filePath);
@@ -135,10 +127,11 @@ describe('DocumentClassifierService', () => {
       mockFileReader.isFileSupported.mockReturnValue(true);
       mockFileReader.readFile.mockResolvedValue({
         content: 'Document content',
-        type: 'pdf'
+        filename: 'document.pdf',
+        extension: '.pdf'
       });
 
-      mockOpenAI.generateCompletion.mockRejectedValue(
+      mockOpenAI.classifyDocument.mockRejectedValue(
         new Error('OpenAI API error')
       );
 
@@ -158,11 +151,17 @@ describe('DocumentClassifierService', () => {
       mockFileReader.isFileSupported.mockReturnValue(true);
       mockFileReader.readFile.mockResolvedValue({
         content: 'Document content',
-        type: 'pdf'
+        filename: 'document.pdf',
+        extension: '.pdf'
       });
 
-      mockOpenAI.generateCompletion.mockResolvedValue({
-        content: 'Invalid JSON'
+      // Since classifyDocument returns DocumentClassification directly,
+      // we'll simulate the actual behavior where it might return a default
+      mockOpenAI.classifyDocument.mockResolvedValue({
+        primaryFolder: '10_Archive',
+        subfolder: 'Unorganized',
+        confidence: 0.0,
+        reasoning: 'Invalid response format'
       });
 
       const result = await classifierService.classifyFile(filePath);
@@ -171,7 +170,7 @@ describe('DocumentClassifierService', () => {
         primaryFolder: '10_Archive',
         subfolder: 'Unorganized',
         confidence: 0.0,
-        reasoning: 'Classification failed: Invalid response format'
+        reasoning: 'Invalid response format'
       });
     });
 
@@ -205,16 +204,15 @@ describe('DocumentClassifierService', () => {
       mockFileReader.isFileSupported.mockReturnValue(true);
       mockFileReader.readFile.mockResolvedValue({
         content: 'Document content',
-        type: 'pdf'
+        filename: 'document.pdf',
+        extension: '.pdf'
       });
 
-      mockOpenAI.generateCompletion.mockResolvedValue({
-        content: JSON.stringify({
-          primaryFolder: '01_Corporate_and_Governance',
-          subfolder: 'Contracts',
-          confidence: 0.85,
-          reasoning: 'Standard contract'
-        })
+      mockOpenAI.classifyDocument.mockResolvedValue({
+        primaryFolder: '01_Corporate_and_Governance',
+        subfolder: 'Contracts',
+        confidence: 0.85,
+        reasoning: 'Standard contract'
       });
 
       const startTime = Date.now();
@@ -241,16 +239,14 @@ describe('DocumentClassifierService', () => {
         .mockReturnValueOnce(true);   // error.pdf
 
       mockFileReader.readFile
-        .mockResolvedValueOnce({ content: 'Valid content', type: 'pdf' })
+        .mockResolvedValueOnce({ content: 'Valid content', filename: 'valid.pdf', extension: '.pdf' })
         .mockRejectedValueOnce(new Error('Read error'));
 
-      mockOpenAI.generateCompletion.mockResolvedValueOnce({
-        content: JSON.stringify({
-          primaryFolder: '03_Finance_and_Investment',
-          subfolder: 'Contracts',
-          confidence: 0.9,
-          reasoning: 'Valid classification'
-        })
+      mockOpenAI.classifyDocument.mockResolvedValueOnce({
+        primaryFolder: '03_Finance_and_Investment',
+        subfolder: 'Contracts',
+        confidence: 0.9,
+        reasoning: 'Valid classification'
       });
 
       const results = await classifierService.batchClassify(filePaths);

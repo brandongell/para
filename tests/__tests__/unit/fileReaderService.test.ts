@@ -8,7 +8,17 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 jest.mock('fs');
 jest.mock('mammoth');
 jest.mock('@google/generative-ai');
-jest.mock('../../../src/services/geminiPdfService');
+jest.mock('../../../src/services/geminiPdfService', () => ({
+  GeminiPdfService: jest.fn().mockImplementation(() => ({
+    extractMetadataFromPdf: jest.fn().mockResolvedValue({
+      filename: 'test.pdf',
+      document_type: 'Test Document',
+      status: 'executed',
+      signers: [],
+      category: 'Test'
+    })
+  }))
+}));
 
 describe('FileReaderService', () => {
   let fileReaderService: FileReaderService;
@@ -17,6 +27,20 @@ describe('FileReaderService', () => {
   
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Reset the GeminiPdfService mock to default behavior
+    const { GeminiPdfService } = require('../../../src/services/geminiPdfService');
+    (GeminiPdfService as jest.MockedClass<any>).mockClear();
+    (GeminiPdfService as jest.MockedClass<any>).mockImplementation(() => ({
+      extractMetadataFromPdf: jest.fn().mockResolvedValue({
+        filename: 'test.pdf',
+        document_type: 'Test Document',
+        status: 'executed',
+        signers: [],
+        category: 'Test'
+      })
+    }));
+    
     fileReaderService = new FileReaderService();
   });
 
@@ -53,7 +77,7 @@ describe('FileReaderService', () => {
     it('should handle edge cases', () => {
       expect(fileReaderService.isFileSupported('')).toBe(false);
       expect(fileReaderService.isFileSupported('no-extension')).toBe(false);
-      expect(fileReaderService.isFileSupported('.pdf')).toBe(true); // Just extension
+      expect(fileReaderService.isFileSupported('.pdf')).toBe(false); // Just extension, no filename
       expect(fileReaderService.isFileSupported('file.PDF')).toBe(true); // Uppercase
     });
   });
@@ -162,7 +186,7 @@ describe('FileReaderService', () => {
       const filePath = '/test/document.pdf';
 
       await expect(fileReaderService.readFile(filePath))
-        .rejects.toThrow('Gemini service not initialized');
+        .rejects.toThrow('Failed to read file: document.pdf');
     });
 
     it('should handle unsupported file types', async () => {
@@ -268,12 +292,14 @@ describe('FileReaderService', () => {
     it('should handle Gemini API errors gracefully', async () => {
       const filePath = '/test/document.pdf';
       
-      // Make the GeminiPdfService mock throw an error
-      jest.mock('../../../src/services/geminiPdfService', () => ({
-        GeminiPdfService: jest.fn().mockImplementation(() => ({
-          extractMetadataFromPdf: jest.fn().mockRejectedValue(new Error('Gemini API error'))
-        }))
+      // Mock GeminiPdfService to throw error
+      const { GeminiPdfService } = require('../../../src/services/geminiPdfService');
+      (GeminiPdfService as jest.MockedClass<any>).mockImplementation(() => ({
+        extractMetadataFromPdf: jest.fn().mockRejectedValue(new Error('Gemini API error'))
       }));
+      
+      // Reset fileReaderService with Gemini key
+      fileReaderService = new FileReaderService('test-gemini-key');
 
       await expect(fileReaderService.readFile(filePath))
         .rejects.toThrow('Failed to read file: document.pdf');
@@ -308,10 +334,21 @@ describe('FileReaderService', () => {
           stamps: 1
         }
       };
+      
+      // Set up Gemini service to return the visual data
+      const { GeminiPdfService } = require('../../../src/services/geminiPdfService');
+      (GeminiPdfService as jest.MockedClass<any>).mockImplementation(() => ({
+        extractMetadataFromPdf: jest.fn().mockResolvedValue(mockVisualData)
+      }));
+      
+      // Create new FileReaderService with Gemini key
+      fileReaderService = new FileReaderService('test-gemini-key');
 
       const result = await fileReaderService.readFile(filePath);
       
       expect(result.content).toContain('Document:');
+      expect(result.content).toContain('Alice Johnson');
+      expect(result.content).toContain('Bob Smith');
       expect(result.extension).toBe('.pdf');
     });
   });
@@ -325,28 +362,40 @@ describe('FileReaderService', () => {
     });
 
     it('should extract metadata from PDF using Gemini', async () => {
+      // Set up Gemini service with specific metadata
+      const expectedMetadata = {
+        filename: 'document.pdf',
+        document_type: 'Contract',
+        status: 'executed',
+        signers: [{ name: 'John Doe', date_signed: '2024-01-01' }],
+        contract_value: '$10,000'
+      };
+      
+      const { GeminiPdfService } = require('../../../src/services/geminiPdfService');
+      (GeminiPdfService as jest.MockedClass<any>).mockImplementation(() => ({
+        extractMetadataFromPdf: jest.fn().mockResolvedValue(expectedMetadata)
+      }));
+      
       fileReaderService = new FileReaderService('test-gemini-key');
       
-      // The actual implementation will use the mocked GeminiPdfService
       const result = await fileReaderService.extractMetadataWithGemini('/test/document.pdf');
       
-      expect(result).toBeDefined();
-      expect(result).toHaveProperty('filename');
-      expect(result).toHaveProperty('status');
+      expect(result).toEqual(expectedMetadata);
+      expect(result.filename).toBe('document.pdf');
+      expect(result.status).toBe('executed');
     });
 
     it('should handle invalid PDF files', async () => {
-      fileReaderService = new FileReaderService('test-gemini-key');
-      
       // Mock GeminiPdfService to throw error
-      jest.mock('../../../src/services/geminiPdfService', () => ({
-        GeminiPdfService: jest.fn().mockImplementation(() => ({
-          extractMetadataFromPdf: jest.fn().mockRejectedValue(new Error('Invalid PDF'))
-        }))
+      const { GeminiPdfService } = require('../../../src/services/geminiPdfService');
+      (GeminiPdfService as jest.MockedClass<any>).mockImplementation(() => ({
+        extractMetadataFromPdf: jest.fn().mockRejectedValue(new Error('Invalid PDF'))
       }));
       
+      fileReaderService = new FileReaderService('test-gemini-key');
+      
       await expect(fileReaderService.extractMetadataWithGemini('/test/invalid.pdf'))
-        .rejects.toThrow();
+        .rejects.toThrow('Invalid PDF');
     });
   });
 

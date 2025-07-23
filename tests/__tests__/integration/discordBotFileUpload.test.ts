@@ -93,9 +93,8 @@ describe('Discord Bot File Upload Integration Tests', () => {
       // Mock classification
       mockClassifier.classifyFile.mockResolvedValue({
         primaryFolder: '02_People_and_Employment',
-        subFolder: 'Employment_Agreements',
-        documentType: 'Employment Agreement',
-        parties: ['Company', 'Employee'],
+        subfolder: 'Employment_Agreements',
+        confidence: 0.95,
         reasoning: 'Employment agreement document'
       });
       
@@ -109,14 +108,14 @@ describe('Discord Bot File Upload Integration Tests', () => {
       
       // Mock metadata generation
       mockMetadataService.generateMetadataForOrganizedFile.mockResolvedValue({
-        metadataPath: path.join(testDir, '02_People_and_Employment/Employment_Agreements/Employment_Agreement.pdf.metadata.json'),
         metadata: {
           filename: 'Employment_Agreement.pdf',
           status: 'executed',
           category: 'People_and_Employment',
           signers: [],
           fully_executed_date: null
-        }
+        },
+        metadataPath: path.join(testDir, '02_People_and_Employment/Employment_Agreements/Employment_Agreement.pdf.metadata.json')
       });
       
       // Process message
@@ -168,8 +167,8 @@ describe('Discord Bot File Upload Integration Tests', () => {
       });
       
       mockMetadataService.generateMetadataForOrganizedFile.mockResolvedValue({
-        metadataPath: path.join(testDir, '09_Templates/Legal_Templates/Template_[BLANK]_NDA.pdf.metadata.json'),
-        metadata: mockDocuments.templateNDA.metadata
+        metadata: mockDocuments.templateNDA.metadata,
+        metadataPath: path.join(testDir, '09_Templates/Legal_Templates/Template_[BLANK]_NDA.pdf.metadata.json')
       });
       
       const messageHandler = mockClient.on.mock.calls.find(call => call[0] === 'messageCreate')?.[1];
@@ -266,16 +265,14 @@ describe('Discord Bot File Upload Integration Tests', () => {
       mockClassifier.classifyFile
         .mockResolvedValueOnce({
           primaryFolder: '01_Corporate_and_Governance',
-          subFolder: 'Contracts',
-          documentType: 'Contract',
-          parties: [],
+          subfolder: 'Contracts',
+          confidence: 0.9,
           reasoning: 'Valid document'
         })
         .mockResolvedValueOnce({
           primaryFolder: '10_Archive',
-          subFolder: 'Unorganized',
-          documentType: 'Unknown',
-          parties: [],
+          subfolder: 'Unorganized',
+          confidence: 0.0,
           reasoning: 'Unsupported file type'
         });
       
@@ -360,9 +357,8 @@ describe('Discord Bot File Upload Integration Tests', () => {
       
       mockClassifier.classifyFile.mockResolvedValue({
         primaryFolder: '01_Corporate_and_Governance',
-        subFolder: 'Contracts',
-        documentType: 'Contract',
-        parties: [],
+        subfolder: 'Contracts',
+        confidence: 0.85,
         reasoning: 'Test'
       });
       
@@ -410,9 +406,8 @@ describe('Discord Bot File Upload Integration Tests', () => {
       
       mockClassifier.classifyFile.mockResolvedValue({
         primaryFolder: '10_Archive',
-        subFolder: 'Unorganized',
-        documentType: 'Unknown',
-        parties: [],
+        subfolder: 'Unorganized',
+        confidence: 0.0,
         reasoning: 'Unsupported file type'
       });
       
@@ -429,7 +424,7 @@ describe('Discord Bot File Upload Integration Tests', () => {
         expect.any(String),
         expect.objectContaining({
           primaryFolder: '10_Archive',
-          subFolder: 'Unorganized'
+          subfolder: 'Unorganized'
         }),
         testDir,
         false // Should not generate metadata for unsupported files
