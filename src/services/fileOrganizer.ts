@@ -6,6 +6,7 @@ import { MetadataService } from './metadataService';
 export class FileOrganizerService {
   private metadataService: MetadataService | null = null;
   private folderStructure: FolderStructure = {
+    '_memory': [], // Special folder for memory files
     '01_Corporate_and_Governance': [
       'Formation_and_Structure',
       'Board_and_Stockholder_Governance', 
@@ -103,31 +104,31 @@ export class FileOrganizerService {
       // Generate metadata BEFORE moving the file
       if (generateMetadata && this.metadataService) {
         try {
-          // Generate metadata while file is still at original location
-          const metadataResult = await this.metadataService.generateMetadataFile(filePath);
+          // Move the file first
+          console.log(`\n📁 Moving file to target location...`);
+          await this.moveFile(filePath, finalTargetPath);
+          
+          // Then generate metadata at the organized location using original filename
+          const metadataResult = await this.metadataService.generateMetadataForOrganizedFile(filePath, finalTargetPath);
           
           if (metadataResult.success) {
-            // Calculate where the metadata file should go
-            const targetMetadataPath = `${finalTargetPath}.metadata.json`;
-            const sourceMetadataPath = `${filePath}.metadata.json`;
-            
-            // Move metadata file to target location
-            if (fs.existsSync(sourceMetadataPath)) {
-              await this.moveFile(sourceMetadataPath, targetMetadataPath);
-              metadataPath = targetMetadataPath;
-              console.log(`📋 Metadata created and moved: ${path.basename(metadataPath)}`);
-            }
+            metadataPath = `${finalTargetPath}.metadata.json`;
+            console.log(`📋 Metadata created: ${path.basename(metadataPath)}`);
           } else {
             console.warn(`⚠️  Failed to generate metadata: ${metadataResult.error}`);
           }
         } catch (error) {
           console.warn(`⚠️  Metadata generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          // If metadata fails, still consider the organization successful if file was moved
+          if (!fs.existsSync(finalTargetPath)) {
+            throw error; // Re-throw if file wasn't moved
+          }
         }
+      } else {
+        // If not generating metadata, just move the file
+        console.log(`\n📁 Moving file...`);
+        await this.moveFile(filePath, finalTargetPath);
       }
-      
-      // Now move the main file
-      console.log(`\n📁 Moving main file...`);
-      await this.moveFile(filePath, finalTargetPath);
       
       console.log(`✅ Successfully organized: ${filename}`);
       console.log(`   📍 Final location: ${path.relative(targetRootPath, finalTargetPath)}`)
@@ -262,13 +263,15 @@ export class FileOrganizerService {
       const stat = fs.statSync(fullPath);
       
       if (stat.isFile()) {
-        // Skip hidden files and system files
-        if (!item.startsWith('.') && !item.startsWith('~')) {
+        // Skip hidden files, system files, and special PARA files
+        if (!item.startsWith('.') && !item.startsWith('~') && 
+            item !== 'COMPANY_MEMORY.md' && 
+            !item.endsWith('.metadata.json')) {
           files.push(fullPath);
         }
       } else if (stat.isDirectory()) {
-        // Skip the organized folders we create
-        if (!Object.keys(this.folderStructure).includes(item)) {
+        // Skip the organized folders we create and the memory folder
+        if (!Object.keys(this.folderStructure).includes(item) && item !== '_memory') {
           const subFiles = await this.getAllFiles(fullPath);
           files.push(...subFiles);
         }

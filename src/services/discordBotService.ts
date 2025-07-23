@@ -7,7 +7,8 @@ import { FileOrganizerService } from './fileOrganizer';
 import { MetadataService } from './metadataService';
 import { NaturalLanguageProcessor } from './naturalLanguageProcessor';
 import { ConversationManager } from './conversationManager';
-import { SmartSearchService } from './smartSearchService';
+import { EnhancedSmartSearchService } from './enhancedSmartSearchService';
+import { UnifiedSearchResult } from '../types/searchTypes';
 // import { TemplateManagementService } from './templateManagementService';
 import { BotIntent, BotResponse, SearchResult } from '../types';
 
@@ -18,7 +19,7 @@ export class DiscordBotService {
   private metadataService: MetadataService;
   private nlp: NaturalLanguageProcessor;
   private conversationManager: ConversationManager;
-  private searchService: SmartSearchService;
+  private searchService: EnhancedSmartSearchService;
   // private templateService: TemplateManagementService | null = null;
   private organizeFolderPath: string;
   private tempDir: string;
@@ -56,7 +57,7 @@ export class DiscordBotService {
     this.metadataService = new MetadataService(openaiApiKey, geminiApiKey);
     this.nlp = new NaturalLanguageProcessor(openaiApiKey);
     this.conversationManager = new ConversationManager();
-    this.searchService = new SmartSearchService(organizeFolderPath);
+    this.searchService = new EnhancedSmartSearchService(organizeFolderPath, openaiApiKey, geminiApiKey);
 
     // Set metadata service in organizer
     this.organizer.setMetadataService(this.metadataService);
@@ -200,24 +201,51 @@ export class DiscordBotService {
           break;
 
         case 'SEARCH_DOCUMENTS':
-          const searchResults = await this.searchService.searchByNaturalLanguage(intent);
-          results = searchResults.slice(0, 10); // Limit to top 10 results
-          response = await this.nlp.generateResponse(intent, { results: searchResults }, context);
+          const searchResult = await this.searchService.search(intent.parameters.query || messageContent, {
+            expandSynonyms: true,
+            fuzzyMatchThreshold: 0.6,
+            maxResults: 10,
+            useCache: true
+          });
+          
+          // Convert enhanced results to format expected by NLP
+          const formattedResults = this.formatSearchResultsForResponse(searchResult);
+          results = formattedResults;
+          
+          // If AI provided an answer, include it in the response
+          if (searchResult.answer) {
+            // Format AI answer with sources
+            const aiAnswerText = this.formatAIAnswerForDiscord(searchResult.answer);
+            
+            // Get regular search response
+            const searchResponse = await this.nlp.generateResponse(intent, { 
+              results: formattedResults,
+              searchPath: searchResult.searchPath
+            }, context);
+            
+            // Combine AI answer with search results
+            response = {
+              content: aiAnswerText + '\n\n' + searchResponse.content,
+              followUpSuggestions: searchResponse.followUpSuggestions
+            };
+          } else {
+            response = await this.nlp.generateResponse(intent, { results: formattedResults }, context);
+          }
           break;
 
         case 'REQUEST_TEMPLATE':
-          // For template requests, search specifically for templates
-          const templateIntent = {
-            ...intent,
-            type: 'SEARCH_DOCUMENTS' as const,
-            parameters: {
-              ...intent.parameters,
-              status: 'template'
-            }
-          };
-          const templateResults = await this.searchService.searchByNaturalLanguage(templateIntent);
-          results = templateResults.slice(0, 10);
-          response = await this.nlp.generateResponse(intent, { results: templateResults }, context);
+          // For template requests, search with status:template filter
+          const templateQuery = `status:template ${intent.parameters.query || ''}`.trim();
+          const templateResult = await this.searchService.search(templateQuery, {
+            expandSynonyms: true,
+            fuzzyMatchThreshold: 0.7,
+            maxResults: 10,
+            forceSearchPath: 'fast' // Templates are usually simple searches
+          });
+          
+          const formattedTemplateResults = this.formatSearchResultsForResponse(templateResult);
+          results = formattedTemplateResults;
+          response = await this.nlp.generateResponse(intent, { results: formattedTemplateResults }, context);
           break;
 
         case 'GET_DOCUMENT_INFO':
@@ -236,9 +264,17 @@ export class DiscordBotService {
           break;
 
         case 'LIST_DOCUMENTS':
-          const listResults = await this.searchService.searchByNaturalLanguage(intent);
-          results = listResults;
-          response = await this.nlp.generateResponse(intent, { results: listResults }, context);
+          const listQuery = intent.parameters.query || 'list all documents';
+          const listResult = await this.searchService.search(listQuery, {
+            expandSynonyms: true,
+            maxResults: 20,
+            forceSearchPath: 'fast', // Listing is usually a fast operation
+            useCache: true
+          });
+          
+          const formattedListResults = this.formatSearchResultsForResponse(listResult);
+          results = formattedListResults;
+          response = await this.nlp.generateResponse(intent, { results: formattedListResults }, context);
           break;
 
         case 'GET_STATISTICS':
@@ -453,7 +489,11 @@ Just talk to me naturally - no special commands needed!`,
     }
     
     const buffer = await response.buffer();
-    const tempFilePath = path.join(this.tempDir, `${Date.now()}_${attachment.name}`);
+    // Use original filename to preserve template indicators like [BLANK]
+    // Add timestamp as subdirectory to avoid conflicts
+    const tempSubDir = path.join(this.tempDir, `discord_${Date.now()}`);
+    fs.mkdirSync(tempSubDir, { recursive: true });
+    const tempFilePath = path.join(tempSubDir, attachment.name);
     
     fs.writeFileSync(tempFilePath, buffer);
     return tempFilePath;
@@ -608,6 +648,69 @@ Just talk to me naturally - no special commands needed!`,
         await thread.send(suggestionsText);
       }
     }
+  }
+
+  /**
+   * Format enhanced search results for Discord response
+   */
+  private formatSearchResultsForResponse(searchResult: UnifiedSearchResult): any[] {
+    const formattedResults: any[] = [];
+    
+    // Add documents as results
+    for (const doc of searchResult.documents) {
+      formattedResults.push({
+        filename: doc.filename,
+        path: doc.path,
+        relevance: doc.relevance,
+        matchType: doc.matchType,
+        matchReason: doc.matchDetails.reason,
+        metadata: doc.metadata,
+        // Include source attribution if available
+        source: searchResult.searchPath === 'ai' ? 'AI Search' : 'Document Search'
+      });
+    }
+    
+    // Add memory results if available
+    if (searchResult.memoryResults) {
+      for (const memResult of searchResult.memoryResults) {
+        formattedResults.push({
+          type: 'memory',
+          source: memResult.source,
+          section: memResult.section,
+          content: memResult.content,
+          relevance: memResult.relevance
+        });
+      }
+    }
+    
+    return formattedResults;
+  }
+
+  /**
+   * Format AI answer with source attribution for Discord
+   */
+  private formatAIAnswerForDiscord(answer: UnifiedSearchResult['answer']): string {
+    if (!answer) return '';
+    
+    let formatted = `**Answer:** ${answer.text}\n\n`;
+    
+    if (answer.sources && answer.sources.length > 0) {
+      formatted += '**Sources:**\n';
+      for (const source of answer.sources) {
+        formatted += `📄 \`${source.memoryFile}\` → ${source.section}\n`;
+        if (source.originalDocument !== 'not specified') {
+          formatted += `   • Source: ${path.basename(source.originalDocument)}\n`;
+        }
+        if (source.excerpt) {
+          formatted += `   • "${source.excerpt.substring(0, 100)}..."\n`;
+        }
+      }
+      formatted += '\n';
+    }
+    
+    formatted += `*Confidence: ${Math.round(answer.confidence * 100)}%*`;
+    
+    return formatted;
   }
 
   async shutdown(): Promise<void> {

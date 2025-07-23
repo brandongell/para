@@ -899,10 +899,40 @@ export class MemoryService {
    * Update relevant memory files for a single document
    */
   private async updateRelevantMemoryFiles(documentPath: string, metadata: DocumentMetadata): Promise<void> {
-    // This will be implemented to update only the relevant memory files
-    // based on the document category and content
-    // For now, we'll do a full refresh
-    await this.refreshAllMemory();
+    console.log(`📝 Updating relevant memory files for: ${path.basename(documentPath)}`);
+    
+    // Only update the memory files that are relevant to this document
+    // This is much more efficient than refreshing everything
+    
+    // If it's a template, update templates inventory
+    if (metadata.status === 'template') {
+      console.log(`📋 Detected template - updating templates inventory...`);
+      const documents = await this.scanAllDocuments();
+      await this.generateTemplatesInventory(documents);
+      console.log(`✅ Templates inventory updated`);
+    }
+    
+    // Update document index (always)
+    console.log(`📑 Updating document index...`);
+    const documents = await this.scanAllDocuments();
+    await this.generateDocumentIndex(documents);
+    
+    // Update category-specific memory files based on document type
+    if (metadata.category === 'Finance_and_Investment') {
+      console.log(`💰 Updating financial memory files...`);
+      await this.generateFinancialSummary(documents);
+      await this.generateInvestorsAndCapTable(documents);
+    } else if (metadata.category === 'People_and_Employment') {
+      console.log(`👥 Updating people directory...`);
+      await this.generatePeopleDirectory(documents);
+      await this.generateEquityAndOptions(documents);
+    } else if (metadata.category === 'Corporate_and_Governance') {
+      console.log(`🏢 Updating corporate info...`);
+      await this.generateCompanyInfo(documents);
+      await this.generateLegalEntities(documents);
+    }
+    
+    console.log(`✅ Memory update complete for ${path.basename(documentPath)}`);
   }
 
   private async generatePartnershipsAndChannels(documents: Array<{ path: string; metadata: DocumentMetadata }>): Promise<void> {

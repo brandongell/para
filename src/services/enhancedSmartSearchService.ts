@@ -131,6 +131,16 @@ export class EnhancedSmartSearchService {
     // Parse filters
     const filters: ParsedSearchQuery['filters'] = {};
     
+    // Parse status filter (e.g., status:template, status:executed)
+    const statusMatch = query.match(/status:(\w+)/i);
+    if (statusMatch) {
+      filters.status = [statusMatch[1].toLowerCase()];
+      // Remove the filter from expanded queries
+      expandedQueries.forEach((q, i) => {
+        expandedQueries[i] = q.replace(/status:\w+/i, '').trim();
+      });
+    }
+    
     // Parse value comparisons
     const valueComparison = SearchMappings.parseValueComparison(query);
     if (valueComparison) {

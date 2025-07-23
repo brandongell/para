@@ -65,7 +65,10 @@ export class FileMonitorService {
 
     // Set up event handlers
     this.watcher
-      .on('add', (filePath) => this.handleNewFile(filePath))
+      .on('add', (filePath) => {
+        console.log(`🔍 File watcher detected: ${filePath}`);
+        this.handleNewFile(filePath);
+      })
       .on('error', (error) => this.handleError(error))
       .on('ready', () => {
         console.log('✅ File monitoring is active and ready!');
@@ -104,11 +107,12 @@ export class FileMonitorService {
       // Classify the document
       const classification = await this.classifier.classifyFile(filePath);
       
-      // Organize the file
+      // Organize the file with metadata generation
       const result = await this.organizer.organizeFile(
         filePath,
         classification,
-        this.watchPath
+        this.watchPath,
+        true // Ensure metadata is generated
       );
 
       if (result.success) {
@@ -122,33 +126,24 @@ export class FileMonitorService {
             const metadataContent = fs.readFileSync(result.metadataPath, 'utf-8');
             const metadata = JSON.parse(metadataContent);
             
-            // Check if document is a template and prompt for Documenso upload
-            if (metadata.status === 'template' && this.templatePromptService.isEnabled()) {
-              const templateLink = await this.templatePromptService.promptForTemplateUpload(
-                result.newPath!,
-                metadata
-              );
-              
-              // Update metadata with Documenso information if uploaded
-              if (templateLink) {
-                metadata.documenso = {
-                  document_id: templateLink.documentId,
-                  status: 'uploaded',
-                  template_link: templateLink.templateCreationUrl,
-                  uploaded_at: new Date().toISOString()
-                };
-                
-                // Write updated metadata back to file
-                fs.writeFileSync(result.metadataPath, JSON.stringify(metadata, null, 2));
-                console.log(`📋 Metadata updated with Documenso information`);
-              }
+            // Skip Documenso upload prompt in monitor mode to avoid readline errors
+            // Template upload should be done through Discord bot instead
+            if (metadata.status === 'template') {
+              console.log(`📋 Template detected - skipping interactive upload prompt in monitor mode`);
             }
             
             // Update memory with new document
             if (this.memoryService) {
               console.log(`🧠 Updating memory with new document...`);
-              await this.memoryService.updateMemoryForDocument(result.newPath!, metadata);
-              console.log(`✅ Memory updated successfully`);
+              try {
+                await this.memoryService.updateMemoryForDocument(result.newPath!, metadata);
+                console.log(`✅ Memory updated successfully`);
+              } catch (memoryError) {
+                console.error(`❌ Failed to update memory:`, memoryError);
+                console.error(`   Document: ${result.newPath}`);
+                console.error(`   Status: ${metadata.status}`);
+                // Don't throw - continue processing other files
+              }
             }
           } catch (error) {
             console.error(`⚠️  Failed to process metadata:`, error);
