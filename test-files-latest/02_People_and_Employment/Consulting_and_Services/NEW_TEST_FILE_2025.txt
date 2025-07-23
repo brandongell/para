@@ -1,0 +1,16 @@
+CONSULTING AGREEMENT
+
+This Consulting Agreement is entered into on January 23, 2025.
+
+PARTIES:
+- Consultant: Test Consultant LLC
+- Client: Test Company Inc.
+
+SERVICES:
+The Consultant agrees to provide software development consulting services.
+
+COMPENSATION:
+$150 per hour
+
+TERM:
+6 months

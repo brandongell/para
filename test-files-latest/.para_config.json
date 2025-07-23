@@ -1,0 +1,17 @@
+{
+  "company_name": "test-files-latest",
+  "folder_path": "/Users/brandongell/Library/CloudStorage/GoogleDrive-brgell@gmail.com/My Drive/Manual Library/Work/legal_claude_test/para2/legal-document-organizer/test-files-latest",
+  "onboarded_date": "2025-07-23T19:55:27.180Z",
+  "configuration": {
+    "auto_organize": true,
+    "generate_metadata": true,
+    "monitor_enabled": false,
+    "custom_rules": []
+  },
+  "statistics": {
+    "total_documents": 0,
+    "organized_documents": 0,
+    "templates_identified": 0,
+    "last_processed": null
+  }
+}

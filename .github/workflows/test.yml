@@ -1,0 +1,84 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run linter
+      run: npm run lint --if-present
+    
+    - name: Build TypeScript
+      run: npm run build
+    
+    - name: Run unit tests
+      run: npm run test:unit --if-present || npm test
+      env:
+        OPENAI_API_KEY: test-key
+        GEMINI_API_KEY: test-key
+        DISCORD_BOT_TOKEN: test-token
+        ORGANIZE_FOLDER_PATH: /tmp/test-organize
+    
+    - name: Run integration tests
+      run: npm run test:integration --if-present
+      env:
+        OPENAI_API_KEY: test-key
+        GEMINI_API_KEY: test-key
+        DISCORD_BOT_TOKEN: test-token
+        ORGANIZE_FOLDER_PATH: /tmp/test-organize
+    
+    - name: Run all tests with coverage
+      run: npm run test:coverage --if-present || npm test -- --coverage
+      env:
+        OPENAI_API_KEY: test-key
+        GEMINI_API_KEY: test-key
+        DISCORD_BOT_TOKEN: test-token
+        ORGANIZE_FOLDER_PATH: /tmp/test-organize
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      if: matrix.node-version == '20.x'
+      with:
+        file: ./coverage/lcov.info
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  type-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run TypeScript type checking
+      run: npx tsc --noEmit

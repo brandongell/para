@@ -1,0 +1,135 @@
+<github_issue>
+# feat: Improve Discord search with smarter query matching and memory integration
+
+## Overview
+
+Enhance Discord bot search by better utilizing existing metadata and memory files through improved query understanding and flexible matching algorithms.
+
+## Problem Statement
+
+Users report they can't find documents even with sufficient information because:
+- Search requires exact substring matches
+- Memory files contain answers but aren't properly queried  
+- Rich metadata fields are underutilized
+- No support for typos, synonyms, or natural language variations
+
+## Proposed Solution
+
+Improve search WITHOUT adding complex infrastructure by:
+
+1. **Smarter Query Understanding**
+   - Synonym expansion ("investment docs" → SAFE, convertible notes)
+   - Relative date parsing ("last month", "this year")
+   - Value comparisons ("contracts over $50k")
+   - Negation support ("all NDAs except templates")
+
+2. **Flexible Matching**
+   - Fuzzy matching for typos (Levenshtein distance ≤ 2)
+   - Partial name matching ("Dan" matches "Dan Shipper")
+   - Abbreviation handling (NDA ↔ Non-Disclosure Agreement)
+   - Case-insensitive across all fields
+
+3. **Better Memory Integration**
+   - Parse memory markdown files into searchable sections
+   - Direct answers for fact-based queries
+   - Cross-reference memory with document metadata
+   - Show both aggregated data and source documents
+
+4. **Improved Ranking**
+   - Multi-factor scoring (exact > partial > fuzzy > related)
+   - Weight by document status (executed > draft > template)
+   - Consider recency and conversation context
+
+## Implementation Approach
+
+### Week 1: Query Enhancement
+- [ ] Build synonym mapping dictionary
+- [ ] Add query expansion using GPT-4o
+- [ ] Parse relative dates and value comparisons
+- [ ] Support negations and exclusions
+
+### Week 2: Matching Improvements  
+- [ ] Implement fuzzy matching with scoring
+- [ ] Search across ALL metadata fields
+- [ ] Add abbreviation bi-directional matching
+- [ ] Handle nested objects (parties, signers)
+
+### Week 3: Memory Optimization
+- [ ] Index memory files on startup
+- [ ] Build cross-reference system
+- [ ] Return direct answers + related docs
+- [ ] Cache parsed memory data
+
+### Week 4: Testing & Refinement
+- [ ] Create comprehensive test suite
+- [ ] Optimize performance with caching
+- [ ] Track failed searches for improvement
+- [ ] Gather user feedback
+
+## Acceptance Criteria
+
+- [ ] Natural language queries work ("show me Dan's investment docs")
+- [ ] Typo tolerance (2-character threshold)
+- [ ] Finds documents with partial information
+- [ ] Returns answers from memory files
+- [ ] Search success rate > 75%
+- [ ] No external dependencies added
+
+## Code Examples
+
+```typescript
+// Enhanced query parsing
+"investment docs" → {
+  document_type: ["SAFE", "convertible_note", "investment_agreement"]
+}
+
+// Flexible matching with scoring
+match("Dan", "Dan Shipper") → { score: 0.8, type: 'partial' }
+match("employmnt", "employment") → { score: 0.5, type: 'fuzzy' }
+
+// Memory integration
+"who are our investors?" → 
+  - Direct answer from investors_and_cap_table.md
+  - Related SAFE agreements
+  - Investment documentation
+```
+
+## Benefits
+
+- **No infrastructure changes** - Uses existing systems
+- **Quick implementation** - 4 weeks vs 8 weeks  
+- **Immediate improvements** - Each phase adds value
+- **Lower risk** - No external dependencies
+- **Cost effective** - No additional services needed
+
+## Success Metrics
+
+- Query success rate: >75% (from ~60%)
+- Zero result queries: <10% (from ~40%)
+- Natural language support: Yes (from limited)
+- Typo tolerance: Yes (from none)
+
+## References
+
+- Current search: `src/services/smartSearchService.ts`
+- Memory system: `src/services/memoryService.ts`
+- Metadata structure: `src/types/index.ts`
+
+This pragmatic approach delivers significant improvements by making existing data more accessible through smarter algorithms.
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+</github_issue>
+
+---
+
+## GitHub CLI Command
+
+```bash
+gh issue create \
+  --title "feat: Improve Discord search with smarter query matching and memory integration" \
+  --body "$(cat plans/2025-07-23-discord-search-improvement-issue-simplified.md)" \
+  --label "enhancement,discord-bot,search" \
+  --milestone "Q1 2025"
+```

@@ -102,6 +102,7 @@ describe('Discord Bot File Upload Integration Tests', () => {
       // Mock organization
       mockOrganizer.organizeFile.mockResolvedValue({
         success: true,
+        originalPath: mockAttachment.name,
         newPath: path.join(testDir, '02_People_and_Employment/Employment_Agreements/Employment_Agreement.pdf'),
         metadataPath: path.join(testDir, '02_People_and_Employment/Employment_Agreements/Employment_Agreement.pdf.metadata.json')
       });
@@ -161,6 +162,7 @@ describe('Discord Bot File Upload Integration Tests', () => {
       
       mockOrganizer.organizeFile.mockResolvedValue({
         success: true,
+        originalPath: mockAttachment.name,
         newPath: path.join(testDir, '09_Templates/Legal_Templates/Template_[BLANK]_NDA.pdf'),
         metadataPath: path.join(testDir, '09_Templates/Legal_Templates/Template_[BLANK]_NDA.pdf.metadata.json')
       });
@@ -209,14 +211,14 @@ describe('Discord Bot File Upload Integration Tests', () => {
       
       mockClassifier.classifyFile.mockResolvedValue({
         primaryFolder: '01_Corporate_and_Governance',
-        subFolder: 'Contracts',
-        documentType: 'Contract',
-        parties: [],
+        subfolder: 'Contracts',
+        confidence: 0.85,
         reasoning: 'Corporate contract'
       });
       
       mockOrganizer.organizeFile.mockResolvedValue({
         success: true,
+        originalPath: 'document.pdf',
         newPath: path.join(testDir, '01_Corporate_and_Governance/Contracts/document.pdf'),
         metadataPath: path.join(testDir, '01_Corporate_and_Governance/Contracts/document.pdf.metadata.json')
       });
@@ -280,10 +282,12 @@ describe('Discord Bot File Upload Integration Tests', () => {
       mockOrganizer.organizeFile
         .mockResolvedValueOnce({
           success: true,
+          originalPath: 'Valid.pdf',
           newPath: path.join(testDir, '01_Corporate_and_Governance/Contracts/Valid.pdf')
         })
         .mockResolvedValueOnce({
           success: true,
+          originalPath: 'Invalid.exe',
           newPath: path.join(testDir, '10_Archive/Unorganized/Invalid.exe')
         });
       
@@ -364,6 +368,7 @@ describe('Discord Bot File Upload Integration Tests', () => {
       
       mockOrganizer.organizeFile.mockResolvedValue({
         success: false,
+        originalPath: 'Document.pdf',
         error: 'Permission denied'
       });
       
@@ -413,6 +418,7 @@ describe('Discord Bot File Upload Integration Tests', () => {
       
       mockOrganizer.organizeFile.mockResolvedValue({
         success: true,
+        originalPath: 'Video.mp4',
         newPath: path.join(testDir, '10_Archive/Unorganized/Video.mp4')
       });
       
@@ -443,9 +449,8 @@ describe('Discord Bot File Upload Integration Tests', () => {
       
       mockClassifier.classifyFile.mockResolvedValue({
         primaryFolder: '01_Corporate_and_Governance',
-        subFolder: 'Contracts',
-        documentType: 'Contract',
-        parties: [],
+        subfolder: 'Contracts',
+        confidence: 0.85,
         reasoning: 'Corporate contract'
       });
       

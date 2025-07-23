@@ -1,3 +1,4 @@
 discord: npm run discord
-cli: npm run dev
+monitor: npm run monitor
+memory: npm run refresh-memory
 oauth: npm run oauth-server

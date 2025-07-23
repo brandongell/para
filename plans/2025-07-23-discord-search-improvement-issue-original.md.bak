@@ -1,0 +1,172 @@
+<github_issue>
+# feat: Implement AI-powered semantic search for Discord bot
+
+## Overview
+
+Transform the current basic string-matching search into a modern semantic search engine that understands user intent and delivers highly relevant results for legal documents.
+
+## Problem Statement
+
+Users report that Discord search "isn't very capable" - they can't find documents even when providing sufficient information. The current implementation uses simple substring matching without understanding context, synonyms, or user intent.
+
+### Current Pain Points
+- 🔴 **No semantic understanding** - "investment documents" won't find SAFE agreements
+- 🔴 **Exact string matching only** - No typo tolerance or fuzzy search
+- 🔴 **Limited to metadata** - Can't search document contents
+- 🔴 **Poor relevance** - Simple scoring leads to irrelevant results
+- 🔴 **No complex queries** - Can't handle comparisons, date ranges, or boolean logic
+- 🔴 **Performance issues** - Loads all documents on every search
+
+## Proposed Solution
+
+Implement a modern search architecture using **Meilisearch** for ultra-fast (<50ms) search with **OpenAI embeddings** for semantic understanding.
+
+### Architecture Overview
+```
+Discord Bot → Enhanced NLP → Unified Search API → Hybrid Search Engine
+                                                    ├── Semantic Search (Embeddings)
+                                                    ├── Keyword Search (Meilisearch)
+                                                    └── Memory Search (Pre-aggregated)
+```
+
+## Technical Approach
+
+### Core Technologies
+- **Meilisearch**: Open-source, typo-tolerant search engine with <50ms response times
+- **OpenAI text-embedding-3-small**: For semantic search capabilities
+- **Hybrid ranking**: Combine keyword and semantic results for best relevance
+
+### Key Features
+1. **Natural Language Queries**
+   - "contracts worth more than $50k"
+   - "documents expiring next month"
+   - "all NDAs except templates"
+
+2. **Semantic Understanding**
+   - Understands legal terminology relationships
+   - Finds conceptually similar documents
+   - Handles synonyms automatically
+
+3. **Rich Results**
+   - AI-generated summaries
+   - Highlighted matching excerpts
+   - Related document suggestions
+
+## Implementation Phases
+
+### Phase 1: Foundation (Weeks 1-2)
+- [ ] Set up Meilisearch instance
+- [ ] Create document processing pipeline
+- [ ] Replace current search with basic Meilisearch integration
+- [ ] Maintain backward compatibility
+
+### Phase 2: Enhanced Search (Weeks 3-4)
+- [ ] Implement embedding generation
+- [ ] Add semantic search capabilities
+- [ ] Build advanced query parser
+- [ ] Integrate with memory system
+
+### Phase 3: Intelligence Layer (Weeks 5-6)
+- [ ] Implement smart ranking algorithm
+- [ ] Add AI-generated summaries
+- [ ] Create result highlighting
+- [ ] Optimize performance
+
+### Phase 4: Advanced Features (Weeks 7-8)
+- [ ] Add query refinement support
+- [ ] Implement search analytics
+- [ ] Create saved searches
+- [ ] Add voice search support
+
+## Acceptance Criteria
+
+### Functional Requirements
+- [ ] Search returns results in <100ms (currently 2-5s)
+- [ ] Support for natural language queries
+- [ ] Typo-tolerant fuzzy matching
+- [ ] Search within document contents
+- [ ] Complex query support (comparisons, boolean logic, date ranges)
+- [ ] Semantic search finds conceptually related documents
+- [ ] Results include AI summaries and highlights
+
+### Non-Functional Requirements
+- [ ] 90%+ result relevance (from ~40%)
+- [ ] 95%+ query success rate (from ~60%)
+- [ ] Graceful fallback if Meilisearch unavailable
+- [ ] Comprehensive logging and analytics
+- [ ] Documentation for query syntax
+
+### Quality Gates
+- [ ] All existing Discord commands continue working
+- [ ] Search performance tests pass
+- [ ] User acceptance testing positive
+- [ ] Security review completed
+
+## Success Metrics
+
+- **Search Success Rate**: % of searches with clicked results (target: 85%+)
+- **Time to Result**: Average query to click time (target: <5 seconds)
+- **Query Complexity**: % using advanced features (target: 30%+)
+- **User Satisfaction**: Survey scores (target: 4.5+/5)
+
+## Dependencies
+
+- Meilisearch hosting (Docker or cloud)
+- OpenAI API for embeddings
+- Additional Discord bot permissions for rich embeds
+- ~2GB storage for search index
+
+## Risk Analysis
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Meilisearch downtime | High | Fallback to current search |
+| Poor embedding quality | Medium | A/B test different models |
+| User adoption | Medium | Gradual rollout with examples |
+| Index size growth | Low | Implement data retention policies |
+
+## References
+
+### Internal
+- Current implementation: `src/services/smartSearchService.ts:15-357`
+- NLP processor: `src/services/naturalLanguageProcessor.ts:98-113`
+- Discord bot: `src/services/discordBotService.ts:202-206`
+
+### External
+- [Meilisearch Documentation](https://www.meilisearch.com/docs)
+- [OpenAI Embeddings Guide](https://platform.openai.com/docs/guides/embeddings)
+- [Semantic Search Best Practices](https://www.elastic.co/what-is/semantic-search)
+
+### Related Work
+- Previous search improvements: #45, #67
+- Memory system implementation: #89
+- Discord bot enhancements: #92
+
+## Implementation Notes
+
+The current search loads all documents into memory and uses simple `includes()` matching. This approach doesn't scale and provides poor user experience. Modern semantic search will revolutionize how users find information in their legal documents.
+
+Example query improvements:
+- Current: Must search "SAFE" to find SAFE agreements
+- New: Can search "investment", "funding", or "equity" to find SAFE agreements
+
+This enhancement aligns with modern AI-first development practices and user expectations for intelligent search interfaces.
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+</github_issue>
+
+---
+
+## GitHub CLI Command
+
+To create this issue:
+
+```bash
+gh issue create \
+  --title "feat: Implement AI-powered semantic search for Discord bot" \
+  --body "$(cat plans/2025-07-23-discord-search-improvement-issue.md)" \
+  --label "enhancement,discord-bot,search,ai" \
+  --milestone "Q1 2025"
+```

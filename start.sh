@@ -25,9 +25,15 @@ echo ""
 # Start all processes with Overmind
 echo "🎯 Starting all services with Overmind..."
 echo "  📱 Discord Bot - Natural language document processing"
-echo "  💻 CLI Interface - Direct file processing"
+echo "  👀 File Monitor - Auto-organize new documents"
+echo "  🧠 Memory Refresh - Update knowledge base"
+echo "  🔐 OAuth Server - Google Drive authentication"
 echo ""
-echo "Press Ctrl+C to stop all services"
+echo "📝 Commands while running:"
+echo "  overmind connect discord - View Discord bot logs"
+echo "  overmind connect monitor - View file monitor logs"
+echo "  overmind restart <service> - Restart a specific service"
+echo "  Ctrl+C - Stop all services"
 echo ""
 
 overmind start

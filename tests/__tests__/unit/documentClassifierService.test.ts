@@ -81,9 +81,8 @@ describe('DocumentClassifierService', () => {
 
       expect(result).toEqual({
         primaryFolder: '09_Templates',
-        subFolder: 'Legal_Templates',
-        documentType: 'NDA Template',
-        parties: [],
+        subfolder: 'Legal_Templates',
+        confidence: expect.any(Number),
         reasoning: expect.stringContaining('template')
       });
     });
@@ -100,9 +99,8 @@ describe('DocumentClassifierService', () => {
       mockOpenAI.generateCompletion.mockResolvedValue({
         content: JSON.stringify({
           primaryFolder: '02_People_and_Employment',
-          subFolder: 'Employment_Agreements',
-          documentType: 'Employment Agreement',
-          parties: [],
+          subfolder: 'Employment_Agreements',
+          confidence: 0.9,
           reasoning: 'Employment agreement document'
         })
       });
@@ -111,7 +109,7 @@ describe('DocumentClassifierService', () => {
 
       // Should detect template from filename and override classification
       expect(result.primaryFolder).toBe('09_Templates');
-      expect(result.subFolder).toBe('Legal_Templates');
+      expect(result.subfolder).toBe('Legal_Templates');
       expect(result.reasoning).toContain('template');
     });
 
@@ -124,9 +122,8 @@ describe('DocumentClassifierService', () => {
 
       expect(result).toEqual({
         primaryFolder: '10_Archive',
-        subFolder: 'Unorganized',
-        documentType: 'Unknown',
-        parties: [],
+        subfolder: 'Unorganized',
+        confidence: 0.0,
         reasoning: 'Unsupported file type'
       });
       expect(mockFileReader.readFile).not.toHaveBeenCalled();
@@ -149,9 +146,8 @@ describe('DocumentClassifierService', () => {
 
       expect(result).toEqual({
         primaryFolder: '10_Archive',
-        subFolder: 'Unorganized',
-        documentType: 'Unknown',
-        parties: [],
+        subfolder: 'Unorganized',
+        confidence: 0.0,
         reasoning: 'Classification failed: OpenAI API error'
       });
     });
@@ -173,9 +169,8 @@ describe('DocumentClassifierService', () => {
 
       expect(result).toEqual({
         primaryFolder: '10_Archive',
-        subFolder: 'Unorganized',
-        documentType: 'Unknown',
-        parties: [],
+        subfolder: 'Unorganized',
+        confidence: 0.0,
         reasoning: 'Classification failed: Invalid response format'
       });
     });
@@ -192,9 +187,8 @@ describe('DocumentClassifierService', () => {
 
       expect(result).toEqual({
         primaryFolder: '10_Archive',
-        subFolder: 'Unorganized',
-        documentType: 'Unknown',
-        parties: [],
+        subfolder: 'Unorganized',
+        confidence: 0.0,
         reasoning: 'Classification failed: Failed to read file'
       });
     });
@@ -217,9 +211,8 @@ describe('DocumentClassifierService', () => {
       mockOpenAI.generateCompletion.mockResolvedValue({
         content: JSON.stringify({
           primaryFolder: '01_Corporate_and_Governance',
-          subFolder: 'Contracts',
-          documentType: 'Contract',
-          parties: [],
+          subfolder: 'Contracts',
+          confidence: 0.85,
           reasoning: 'Standard contract'
         })
       });
@@ -254,9 +247,8 @@ describe('DocumentClassifierService', () => {
       mockOpenAI.generateCompletion.mockResolvedValueOnce({
         content: JSON.stringify({
           primaryFolder: '03_Finance_and_Investment',
-          subFolder: 'Contracts',
-          documentType: 'Contract',
-          parties: [],
+          subfolder: 'Contracts',
+          confidence: 0.9,
           reasoning: 'Valid classification'
         })
       });
@@ -286,7 +278,7 @@ describe('DocumentClassifierService', () => {
       templateReasons.forEach(reason => {
         const result = service['getDefaultClassification'](reason);
         expect(result.primaryFolder).toBe('09_Templates');
-        expect(result.subFolder).toBe('Legal_Templates');
+        expect(result.subfolder).toBe('Legal_Templates');
         expect(result.reasoning).toContain('template');
       });
     });
@@ -297,9 +289,8 @@ describe('DocumentClassifierService', () => {
       
       expect(result).toEqual({
         primaryFolder: '10_Archive',
-        subFolder: 'Unorganized',
-        documentType: 'Unknown',
-        parties: [],
+        subfolder: 'Unorganized',
+        confidence: 0.0,
         reasoning: 'Generic error occurred'
       });
     });
