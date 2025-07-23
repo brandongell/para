@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import FormData from 'form-data';
+import FormData = require('form-data');
 import fetch from 'node-fetch';
 import { DocumentMetadata } from '../types';
 
@@ -31,6 +31,20 @@ export interface DocumensoTemplateLink {
   apiUrl: string;
 }
 
+export interface DocumensoCreateResponse {
+  documentId: number;
+  uploadUrl?: string;
+  recipients?: Array<{
+    recipientId: number;
+    name: string;
+    email: string;
+    token: string;
+    role: string;
+    signingOrder: number;
+    signingUrl: string;
+  }>;
+}
+
 export class DocumensoService {
   private config: DocumensoConfig;
 
@@ -51,43 +65,66 @@ export class DocumensoService {
     try {
       console.log('📤 Uploading document to Documenso for template creation...');
       
-      // Create form data
-      const formData = new FormData();
-      const fileStream = fs.createReadStream(filePath);
       const fileName = path.basename(filePath);
-      
-      // Add file to form data
-      formData.append('file', fileStream, {
-        filename: fileName,
-        contentType: 'application/pdf'
-      });
-      
-      // Add title based on metadata
       const title = this.generateTemplateTitle(metadata);
-      formData.append('title', title);
       
-      // Add external ID for tracking
-      formData.append('externalId', `template_${Date.now()}_${fileName}`);
+      // Step 1: Create document metadata
+      const createPayload = {
+        title: title,
+        recipients: [
+          {
+            name: "Template Placeholder",
+            email: "template@placeholder.com",
+            role: "SIGNER",
+            signingOrder: 1
+          }
+        ]
+      };
       
-      // Upload document
-      const response = await fetch(`${this.config.apiUrl}/api/v1/documents`, {
+      const createResponse = await fetch(`${this.config.apiUrl}/api/v1/documents`, {
         method: 'POST',
         headers: {
           'Authorization': this.config.apiToken,
-          ...formData.getHeaders()
+          'Content-Type': 'application/json'
         },
-        body: formData
+        body: JSON.stringify(createPayload)
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Documenso upload failed: ${response.status} - ${errorText}`);
+      if (!createResponse.ok) {
+        const errorText = await createResponse.text();
+        throw new Error(`Documenso document creation failed: ${createResponse.status} - ${errorText}`);
       }
 
-      const result = await response.json() as DocumensoUploadResponse;
-      console.log(`✅ Document uploaded successfully: ID ${result.documentId}`);
+      const createResult = await createResponse.json() as DocumensoCreateResponse;
+      console.log(`✅ Document created: ID ${createResult.documentId}`);
       
-      return result;
+      // Step 2: Upload the file if upload URL is provided
+      if (createResult.uploadUrl) {
+        const fileContent = fs.readFileSync(filePath);
+        
+        const uploadResponse = await fetch(createResult.uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/pdf'
+          },
+          body: fileContent
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error(`File upload failed: ${uploadResponse.status}`);
+        }
+        
+        console.log(`✅ File uploaded successfully`);
+      }
+      
+      // Return formatted response
+      return {
+        documentId: createResult.documentId,
+        title: title,
+        documentDataId: '',
+        status: 'DRAFT'
+      };
+      
     } catch (error) {
       console.error('❌ Failed to upload document to Documenso:', error);
       throw error;

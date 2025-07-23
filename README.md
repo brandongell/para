@@ -39,13 +39,39 @@ The memory system pre-indexes all document information into aggregated markdown 
 
 Memory files are automatically updated when new documents are added and enable instant answers via Discord.
 
-## 📝 Template Identification
+## 📝 Template Identification & Documenso Integration
 
 The system automatically identifies template documents using intelligent pattern matching:
 
 - **High Confidence**: Documents with [BLANK], [FORM], (Form), or Template in filename
 - **Medium Confidence**: Generic documents without specific party names
 - **Smart Exclusion**: Won't mark EXECUTED or signed documents as templates
+
+### 🆕 Automatic Documenso Upload Prompt
+
+When a template is detected and Documenso is configured, the system will:
+1. **Prompt you** to upload the template to Documenso
+2. **Upload the document** if you confirm
+3. **Return a configuration link** to set up signature fields
+4. **Update metadata** with Documenso document ID and URL
+
+Example prompt:
+```
+🎯 Template Document Detected!
+📄 File: Employment Agreement [FORM].pdf
+📋 Type: Employment Agreement
+🏷️  Category: People_and_Employment
+🔍 Confidence: HIGH
+
+🤔 Would you like to upload this template to Documenso for configuration? (yes/no): yes
+
+📤 Uploading template to Documenso...
+✅ Template uploaded successfully!
+🔗 Configure your template here:
+   https://app.documenso.com/documents/12345/convert-to-template
+📌 Document ID: 12345
+💡 Tip: Add signature fields, text fields, and other elements in the Documenso interface.
+```
 
 Templates are:
 - Automatically categorized with status: "template"

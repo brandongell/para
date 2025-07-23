@@ -3,6 +3,7 @@ import { DocumentClassifierService } from './services/documentClassifier';
 import { FileOrganizerService } from './services/fileOrganizer';
 import { FileMonitorService } from './services/fileMonitor';
 import { MetadataService } from './services/metadataService';
+import { TemplatePromptService } from './services/templatePromptService';
 import { CLIUtils } from './utils/cli';
 
 // Load environment variables
@@ -14,6 +15,7 @@ class LegalDocumentOrganizer {
   private organizer: FileOrganizerService;
   private monitor: FileMonitorService | null = null;
   private metadataService: MetadataService | null = null;
+  private templatePromptService: TemplatePromptService | null = null;
 
   constructor() {
     this.cli = new CLIUtils();
@@ -27,11 +29,13 @@ class LegalDocumentOrganizer {
       // Check for API keys
       const apiKey = await this.getOpenAIApiKey();
       const geminiApiKey = this.getGeminiApiKey();
+      const documensoConfig = this.getDocumensoConfig();
       
       // Initialize services
       this.classifier = new DocumentClassifierService(apiKey, geminiApiKey);
-      this.monitor = new FileMonitorService(apiKey, geminiApiKey);
+      this.monitor = new FileMonitorService(apiKey, geminiApiKey, documensoConfig);
       this.metadataService = new MetadataService(apiKey, geminiApiKey);
+      this.templatePromptService = new TemplatePromptService(documensoConfig);
       
       // Set metadata service in organizer
       this.organizer.setMetadataService(this.metadataService);
@@ -66,12 +70,12 @@ class LegalDocumentOrganizer {
         await this.startMonitoring(folderPath);
       } else {
         this.cli.displaySuccess('Organization complete! Exiting...');
-        this.cli.close();
+        this.cleanup();
       }
       
     } catch (error) {
       this.cli.displayError('Application error', error as Error);
-      this.cli.close();
+      this.cleanup();
       process.exit(1);
     }
   }
@@ -87,6 +91,28 @@ class LegalDocumentOrganizer {
     }
     
     return geminiApiKey;
+  }
+
+  private getDocumensoConfig(): { apiUrl: string; apiToken: string; appUrl?: string } | undefined {
+    const apiUrl = process.env.DOCUMENSO_API_URL;
+    const apiToken = process.env.DOCUMENSO_API_TOKEN;
+    const appUrl = process.env.DOCUMENSO_APP_URL;
+    
+    if (!apiUrl || !apiToken) {
+      this.cli.displayWarning('Documenso integration not configured - template upload prompts will be disabled');
+      this.cli.displayInfo('To enable Documenso integration, add to your .env file:');
+      this.cli.displayInfo('DOCUMENSO_API_URL=your_documenso_api_url');
+      this.cli.displayInfo('DOCUMENSO_API_TOKEN=your_documenso_api_token');
+      return undefined;
+    }
+    
+    this.cli.displayInfo('✅ Documenso integration enabled for template uploads');
+    
+    return {
+      apiUrl,
+      apiToken,
+      appUrl
+    };
   }
 
   private async getOpenAIApiKey(): Promise<string> {
@@ -149,6 +175,38 @@ class LegalDocumentOrganizer {
           
           if (result.success) {
             successCount++;
+            
+            // Check if it's a template and prompt for Documenso upload
+            if (result.metadataPath && this.templatePromptService?.isEnabled()) {
+              try {
+                const fs = require('fs');
+                const metadataContent = fs.readFileSync(result.metadataPath, 'utf-8');
+                const metadata = JSON.parse(metadataContent);
+                
+                if (metadata.status === 'template') {
+                  const templateLink = await this.templatePromptService.promptForTemplateUpload(
+                    result.newPath!,
+                    metadata
+                  );
+                  
+                  // Update metadata with Documenso information if uploaded
+                  if (templateLink) {
+                    metadata.documenso = {
+                      document_id: templateLink.documentId,
+                      status: 'uploaded',
+                      template_link: templateLink.templateCreationUrl,
+                      uploaded_at: new Date().toISOString()
+                    };
+                    
+                    // Write updated metadata back to file
+                    fs.writeFileSync(result.metadataPath, JSON.stringify(metadata, null, 2));
+                    console.log(`📋 Metadata updated with Documenso information`);
+                  }
+                }
+              } catch (error) {
+                console.error(`⚠️  Failed to check template status:`, error);
+              }
+            }
           } else {
             failCount++;
             console.error(`\n❌ Failed: ${file} - ${result.error}`);
@@ -218,6 +276,13 @@ class LegalDocumentOrganizer {
     } catch (error) {
       this.cli.displayError('Error starting file monitoring', error as Error);
       throw error;
+    }
+  }
+
+  private cleanup(): void {
+    this.cli.close();
+    if (this.templatePromptService) {
+      this.templatePromptService.close();
     }
   }
 }

@@ -4,6 +4,7 @@ import { DocumentClassifierService } from './documentClassifier';
 import { FileOrganizerService } from './fileOrganizer';
 import { MetadataService } from './metadataService';
 import { MemoryService } from './memoryService';
+import { TemplatePromptService } from './templatePromptService';
 
 export class FileMonitorService {
   private watcher: chokidar.FSWatcher | null = null;
@@ -11,13 +12,19 @@ export class FileMonitorService {
   private organizer: FileOrganizerService;
   private metadataService: MetadataService;
   private memoryService: MemoryService | null = null;
+  private templatePromptService: TemplatePromptService;
   private watchPath: string = '';
   private isProcessing: Map<string, boolean> = new Map();
 
-  constructor(openaiApiKey: string, geminiApiKey?: string) {
+  constructor(
+    openaiApiKey: string, 
+    geminiApiKey?: string,
+    documensoConfig?: { apiUrl: string; apiToken: string; appUrl?: string }
+  ) {
     this.classifier = new DocumentClassifierService(openaiApiKey, geminiApiKey);
     this.organizer = new FileOrganizerService();
     this.metadataService = new MetadataService(openaiApiKey, geminiApiKey);
+    this.templatePromptService = new TemplatePromptService(documensoConfig);
     
     // Set metadata service in organizer
     this.organizer.setMetadataService(this.metadataService);
@@ -109,19 +116,42 @@ export class FileMonitorService {
         if (result.metadataPath) {
           console.log(`📋 Metadata created: ${path.basename(result.metadataPath)}`);
           
-          // Update memory with new document
-          if (this.memoryService) {
-            try {
-              const fs = require('fs');
-              const metadataContent = fs.readFileSync(result.metadataPath, 'utf-8');
-              const metadata = JSON.parse(metadataContent);
+          // Read metadata to check if it's a template
+          try {
+            const fs = require('fs');
+            const metadataContent = fs.readFileSync(result.metadataPath, 'utf-8');
+            const metadata = JSON.parse(metadataContent);
+            
+            // Check if document is a template and prompt for Documenso upload
+            if (metadata.status === 'template' && this.templatePromptService.isEnabled()) {
+              const templateLink = await this.templatePromptService.promptForTemplateUpload(
+                result.newPath!,
+                metadata
+              );
               
+              // Update metadata with Documenso information if uploaded
+              if (templateLink) {
+                metadata.documenso = {
+                  document_id: templateLink.documentId,
+                  status: 'uploaded',
+                  template_link: templateLink.templateCreationUrl,
+                  uploaded_at: new Date().toISOString()
+                };
+                
+                // Write updated metadata back to file
+                fs.writeFileSync(result.metadataPath, JSON.stringify(metadata, null, 2));
+                console.log(`📋 Metadata updated with Documenso information`);
+              }
+            }
+            
+            // Update memory with new document
+            if (this.memoryService) {
               console.log(`🧠 Updating memory with new document...`);
               await this.memoryService.updateMemoryForDocument(result.newPath!, metadata);
               console.log(`✅ Memory updated successfully`);
-            } catch (error) {
-              console.error(`⚠️  Failed to update memory:`, error);
             }
+          } catch (error) {
+            console.error(`⚠️  Failed to process metadata:`, error);
           }
         }
       } else {
