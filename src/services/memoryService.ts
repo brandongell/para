@@ -24,7 +24,8 @@ export class MemoryService {
 
   constructor(organizedFolderPath: string) {
     this.organizedFolderPath = organizedFolderPath;
-    this.memoryDir = path.join(path.dirname(organizedFolderPath), 'memory');
+    // Memory directory is now inside the organized folder
+    this.memoryDir = path.join(organizedFolderPath, '_memory');
     
     // Ensure memory directory exists
     if (!fs.existsSync(this.memoryDir)) {
@@ -165,6 +166,37 @@ export class MemoryService {
   }
 
   /**
+   * Extract critical facts by pattern from all documents
+   */
+  private extractCriticalFactsByPattern(
+    documents: Array<{ path: string; metadata: DocumentMetadata }>,
+    pattern: string | RegExp
+  ): Map<string, { value: any; source: string; key: string }> {
+    const facts = new Map<string, { value: any; source: string; key: string }>();
+    
+    for (const doc of documents) {
+      const { metadata } = doc;
+      const filename = path.basename(doc.path);
+      
+      if (metadata.critical_facts) {
+        Object.entries(metadata.critical_facts).forEach(([key, value]) => {
+          if (typeof pattern === 'string' ? key.includes(pattern) : pattern.test(key)) {
+            // Use a composite key to avoid overwriting similar facts from different docs
+            const uniqueKey = `${key}_${filename}`;
+            facts.set(uniqueKey, {
+              value: value,
+              source: filename,
+              key: key
+            });
+          }
+        });
+      }
+    }
+    
+    return facts;
+  }
+
+  /**
    * Generate company_info.md memory file
    */
   private async generateCompanyInfo(documents: Array<{ path: string; metadata: DocumentMetadata }>): Promise<void> {
@@ -302,10 +334,77 @@ export class MemoryService {
       });
     });
     
-    // TODO: Extract EIN from tax documents when available
-    memory.sections['Tax Information'].push({
-      fact: 'EIN: [To be extracted from tax documents]',
-      source: 'Tax documents pending'
+    // Extract tax information from critical facts
+    const taxFacts = new Map<string, { value: string; source: string }>();
+    
+    for (const doc of documents) {
+      const { metadata } = doc;
+      const filename = path.basename(doc.path);
+      
+      // Check critical facts for tax-related information
+      if (metadata.critical_facts) {
+        // Look for EIN
+        if (metadata.critical_facts.ein_number) {
+          taxFacts.set('ein', {
+            value: String(metadata.critical_facts.ein_number),
+            source: filename
+          });
+        }
+        // Look for state tax IDs
+        if (metadata.critical_facts.state_tax_id) {
+          taxFacts.set('state_tax_id', {
+            value: String(metadata.critical_facts.state_tax_id),
+            source: filename
+          });
+        }
+        // Look for other tax-related critical facts
+        Object.entries(metadata.critical_facts).forEach(([key, value]) => {
+          if (key.includes('tax') || key.includes('ein') || key.includes('tin')) {
+            taxFacts.set(key, {
+              value: String(value),
+              source: filename
+            });
+          }
+        });
+      }
+      
+      // Also check document type for tax documents
+      if (metadata.document_type && metadata.document_type.toLowerCase().includes('ein')) {
+        // Try to extract from other metadata fields if not in critical facts
+        if (!taxFacts.has('ein') && metadata.notes) {
+          const einMatch = metadata.notes.match(/\b\d{2}-\d{7}\b/);
+          if (einMatch) {
+            taxFacts.set('ein', {
+              value: einMatch[0],
+              source: filename
+            });
+          }
+        }
+      }
+    }
+    
+    // Add tax facts to memory
+    if (taxFacts.has('ein')) {
+      const einInfo = taxFacts.get('ein')!;
+      memory.sections['Tax Information'].push({
+        fact: `EIN: ${einInfo.value}`,
+        source: einInfo.source
+      });
+      // Also add as quick fact
+      memory.quickFacts.push({
+        fact: `EIN: ${einInfo.value}`,
+        source: einInfo.source
+      });
+    }
+    
+    // Add other tax facts
+    taxFacts.forEach((info, key) => {
+      if (key !== 'ein') {
+        memory.sections['Tax Information'].push({
+          fact: `${key.replace(/_/g, ' ').toUpperCase()}: ${info.value}`,
+          source: info.source
+        });
+      }
     });
     
     // Save memory file
@@ -450,6 +549,11 @@ export class MemoryService {
     let totalRaised = 0;
     const investmentsByRound = new Map<string, number>();
     
+    // Extract financial critical facts
+    const investmentFacts = this.extractCriticalFactsByPattern(documents, /investment_amount|round_size|principal_amount/);
+    const valuationFacts = this.extractCriticalFactsByPattern(documents, /valuation_cap|pre_money_valuation/);
+    const insuranceFacts = this.extractCriticalFactsByPattern(documents, /policy_number|coverage_amount|deductible|premium/);
+    
     // Extract financial information from documents
     for (const doc of documents) {
       const { path: docPath, metadata } = doc;
@@ -457,18 +561,41 @@ export class MemoryService {
       
       // Process investment documents
       if (metadata.document_type?.includes('SAFE') || filename.includes('SAFE')) {
-        if (metadata.contract_value) {
-          const value = this.parseMonetaryValue(metadata.contract_value);
-          if (value > 0) {
-            totalRaised += value;
-            
-            memory.sections['SAFE Agreements'].push({
-              fact: `SAFE Agreement with ${this.getInvestorName(metadata)}`,
-              source: filename,
-              value: metadata.contract_value,
-              date: metadata.effective_date || undefined || undefined
-            });
+        // First try critical facts
+        let investmentAmount = 0;
+        let valuationCap = null;
+        
+        if (metadata.critical_facts) {
+          if (metadata.critical_facts.investment_amount) {
+            investmentAmount = Number(metadata.critical_facts.investment_amount);
           }
+          if (metadata.critical_facts.valuation_cap) {
+            valuationCap = Number(metadata.critical_facts.valuation_cap);
+          }
+        }
+        
+        // Fall back to contract_value if no critical fact
+        if (investmentAmount === 0 && metadata.contract_value) {
+          investmentAmount = this.parseMonetaryValue(metadata.contract_value);
+        }
+        
+        if (investmentAmount > 0) {
+          totalRaised += investmentAmount;
+          
+          const safeFact = `SAFE Agreement with ${this.getInvestorName(metadata)}`;
+          const entry: MemoryEntry = {
+            fact: safeFact,
+            source: filename,
+            value: `$${investmentAmount.toLocaleString()}`,
+            date: metadata.effective_date || undefined
+          };
+          
+          // Add valuation cap if available
+          if (valuationCap) {
+            entry.metadata = { valuation_cap: `$${valuationCap.toLocaleString()}` };
+          }
+          
+          memory.sections['SAFE Agreements'].push(entry);
         }
       }
       
@@ -484,6 +611,31 @@ export class MemoryService {
               date: metadata.effective_date || undefined || undefined
             });
           }
+        }
+      }
+      
+      // Process insurance documents using critical facts
+      if (metadata.critical_facts && (metadata.document_type?.includes('Insurance') || filename.includes('Insurance'))) {
+        const facts = metadata.critical_facts;
+        if (facts.policy_number || facts.coverage_amount) {
+          const insuranceEntry: MemoryEntry = {
+            fact: `${metadata.document_type || 'Insurance Policy'}`,
+            source: filename
+          };
+          
+          if (facts.policy_number) {
+            insuranceEntry.fact += ` - Policy #${facts.policy_number}`;
+          }
+          if (facts.coverage_amount) {
+            insuranceEntry.value = typeof facts.coverage_amount === 'number' 
+              ? `$${facts.coverage_amount.toLocaleString()}`
+              : String(facts.coverage_amount);
+          }
+          if (facts.carrier) {
+            insuranceEntry.metadata = { carrier: String(facts.carrier) };
+          }
+          
+          memory.sections['Insurance'].push(insuranceEntry);
         }
       }
     }

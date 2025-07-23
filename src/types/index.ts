@@ -70,6 +70,11 @@ export interface DocumentMetadata {
   confidentiality_level?: string; // e.g., "public", "internal", "confidential"
   approval_required?: string; // e.g., "board_approval", "ceo_approval", "standard_authority"
   
+  // Critical facts - dynamically extracted based on document type
+  critical_facts?: {
+    [key: string]: string | number | boolean;
+  };
+  
   // Documenso integration fields
   documenso?: {
     document_id?: number;

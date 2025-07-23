@@ -92,6 +92,26 @@ EXTRACT THE FOLLOWING METADATA:
    - amendment_number: Version control
    - tags: Relevant tags array
 
+9. **CRITICAL FACTS** (MOST IMPORTANT):
+   - Extract ALL critical information based on document type
+   - Use snake_case for keys (e.g., ein_number, not "EIN Number")
+   - Include information that would be searched for later
+   
+   EXAMPLES BY DOCUMENT TYPE:
+   - Tax Documents → ein_number (look for "Employer Identification Number:" XX-XXXXXXX), entity_name, tax_id, filing_date
+   - Employment → employee_name, salary, start_date, title, equity_grant
+   - Investment → investor_name, investment_amount, valuation_cap, discount_rate
+   - Corporate → entity_name, state_of_incorporation, entity_number, authorized_shares
+   - Real Estate → monthly_rent, lease_term, square_footage, address, landlord
+   - Insurance → policy_number, coverage_amount, deductible, carrier, premium
+   - Vendor/Customer → contract_value, payment_terms, renewal_date, services
+   
+   VISUAL EXTRACTION HINTS:
+   - EIN/Tax IDs often appear in header sections of IRS documents
+   - Look for patterns like XX-XXXXXXX for EIN numbers
+   - Check both text and visual elements for important numbers
+   - Government forms often have key data in specific form fields
+
 SIGNATURE DETECTION INSTRUCTIONS:
 - Look for filled signature sections, even if main document text shows blanks
 - Check for electronic signatures, stamps, or typed names in signature areas
@@ -132,7 +152,14 @@ RETURN ONLY VALID JSON in this exact format:
   "governing_law": "Delaware",
   "counterparty_role": "investor",
   "amendment_number": "original",
-  "tags": ["SAFE", "investment", "equity"]
+  "tags": ["SAFE", "investment", "equity"],
+  "critical_facts": {
+    "investor_name": "Nashilu Mouen",
+    "investment_amount": 50000,
+    "valuation_cap": 5000000,
+    "discount_rate": 0.20,
+    "mfn_provision": true
+  }
 }
 
 CRITICAL: Extract information from the ACTUAL filled document, including visual signatures and filled form fields. Do not just parse template text.`;
@@ -167,6 +194,7 @@ CRITICAL: Extract information from the ACTUAL filled document, including visual 
         renewal_terms: parsed.renewal_terms || undefined,
         confidentiality_level: parsed.confidentiality_level || undefined,
         approval_required: parsed.approval_required || undefined,
+        critical_facts: parsed.critical_facts || undefined,
         tags: parsed.tags || undefined,
         notes: parsed.notes || 'Extracted using Gemini multimodal analysis'
       };

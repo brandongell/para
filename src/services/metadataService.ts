@@ -26,22 +26,31 @@ export class MetadataService {
         };
       }
 
-      // Read file content
-      const fileContent: FileContent = await this.fileReaderService.readFile(filePath);
+      // Check if this is a PDF - use Gemini for PDFs
+      const extension = path.extname(filePath).toLowerCase();
+      let metadata: DocumentMetadata;
       
-      if (!fileContent.content || fileContent.content.trim().length === 0) {
-        console.warn(`⚠️  Empty file content for metadata extraction: ${filePath}`);
-        return {
-          success: false,
-          error: 'Empty file content'
-        };
-      }
+      if (extension === '.pdf') {
+        // Use Gemini for PDF extraction
+        metadata = await this.fileReaderService.extractMetadataWithGemini(filePath);
+      } else {
+        // For non-PDFs, read content and use OpenAI
+        const fileContent: FileContent = await this.fileReaderService.readFile(filePath);
+        
+        if (!fileContent.content || fileContent.content.trim().length === 0) {
+          console.warn(`⚠️  Empty file content for metadata extraction: ${filePath}`);
+          return {
+            success: false,
+            error: 'Empty file content'
+          };
+        }
 
-      // Extract metadata using AI
-      const metadata = await this.openaiService.extractMetadata(
-        fileContent.content,
-        fileContent.filename
-      );
+        // Extract metadata using AI
+        metadata = await this.openaiService.extractMetadata(
+          fileContent.content,
+          fileContent.filename
+        );
+      }
 
       // Generate metadata file path
       const metadataPath = `${filePath}.metadata.json`;
