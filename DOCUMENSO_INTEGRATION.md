@@ -9,6 +9,7 @@ The legal document organizer now integrates with Documenso, allowing you to:
 - Get direct links to configure templates in Documenso's UI
 - Track which templates have been uploaded
 - Create reusable signing workflows for recurring documents
+- **NEW**: Send templates for signature directly through Discord with interactive field collection
 
 ## Setup
 
@@ -31,6 +32,78 @@ DOCUMENSO_APP_URL=https://app.documenso.com
 2. Go to Settings → API
 3. Create a new API token
 4. Copy the token to your `.env` file
+
+## 🚀 NEW: Discord Template Workflow - Send Documents for Signature
+
+The most powerful feature of our Documenso integration is the ability to send templates for signature directly through Discord with an interactive, conversational workflow.
+
+### How It Works
+
+1. **Request to send a template** using natural language
+2. **Para identifies the template** from your document library
+3. **Interactive field collection** - Para asks for required information
+4. **Review and confirm** before sending
+5. **Document sent** with signing links provided
+
+### Example Workflow
+
+```
+You: Send the MNDA to john@example.com
+
+Para: I'll help you send the Mutual NDA template. Let me gather the required information.
+
+**Field 1 of 2**
+Please provide: **Company Name**
+Example: Acme Corp
+
+You: TechStart Inc.
+
+Para: **Field 2 of 2**
+Please provide: **Effective Date**
+Example: YYYY-MM-DD
+
+You: 2024-01-15
+
+Para: Please review the information below and confirm with 'yes' to send:
+📄 Ready to send: Mutual Non-Disclosure Agreement
+- Company Name: TechStart Inc.
+- Effective Date: 2024-01-15
+👥 Recipients: John (john@example.com)
+
+You: yes
+
+Para: ✅ Document sent successfully!
+📧 john@example.com - [Sign Document](https://app.documenso.com/sign/...)
+```
+
+### Supported Commands
+
+- "Send the [template] to [email]" - Start a workflow with recipient
+- "Send [name] the [template]" - Alternative phrasing
+- "I need to send a [template type]" - Start workflow without recipient
+- "Can you send the [template]" - Start workflow
+- "[name/email] needs to sign the [template]" - Natural phrasing
+
+### Field Collection Features
+
+- **Smart validation**: Email addresses, dates, numbers are validated
+- **Helpful prompts**: Each field shows examples and descriptions
+- **Progress tracking**: See how many fields remain
+- **Cancel anytime**: Type "cancel" to stop the workflow
+- **Error recovery**: Invalid inputs show helpful error messages
+
+### Prerequisites
+
+1. **Template must be uploaded to Documenso**: Use "Upload [template] to Documenso" first
+2. **Template fields must be configured**: Set up fields in Documenso UI
+3. **Valid API credentials**: Ensure Documenso integration is configured
+
+### Tips for Success
+
+- **Prepare templates properly**: Add all required fields in Documenso
+- **Use clear field names**: "Company Name" not "field_1"
+- **Test first**: Try with your own email before sending to clients
+- **Check template status**: Use "show templates" to see what's available
 
 ## Discord Bot Commands
 

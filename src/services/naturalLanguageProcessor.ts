@@ -91,6 +91,7 @@ POSSIBLE INTENTS:
 6. GET_STATISTICS - User wants organizational stats or summaries
 7. HELP - User needs assistance or asks how to use the system
 8. UPLOAD_TO_DOCUMENSO - User wants to upload templates to Documenso for e-signatures
+9. SEND_TEMPLATE - User wants to send a template to someone for signature
 
 PARAMETER EXTRACTION:
 For each intent, extract relevant parameters:
@@ -141,6 +142,19 @@ Documenso upload indicators:
 - "templates not in documenso", "show unuploaded templates"
 - "make this a signing template"
 
+SEND_TEMPLATE parameters:
+- template_name: Name or type of template to send (e.g., "MNDA", "employment agreement")
+- recipient_email: Email address to send to
+- recipient_name: Name of recipient if provided
+
+Send template indicators:
+- "send the [template] to [email]"
+- "send [name] the [template]"
+- "I need to send a [template type]"
+- "can you send the [template]"
+- "prepare [template] for [name/email]"
+- "[name/email] needs to sign the [template]"
+
 CONTEXT AWARENESS:
 - If user has previous search results, they might be asking follow-up questions
 - Consider conversation flow for better intent detection
@@ -168,6 +182,10 @@ EXAMPLES:
 "Upload this template to Documenso" → UPLOAD_TO_DOCUMENSO
 "Show templates not in Documenso" → UPLOAD_TO_DOCUMENSO
 "Get Documenso link for employment agreement" → UPLOAD_TO_DOCUMENSO
+"Send the MNDA to john@example.com" → SEND_TEMPLATE
+"Send John Smith the employment agreement" → SEND_TEMPLATE
+"I need to send a SAFE to investor@vc.com" → SEND_TEMPLATE
+"Can you send the NDA to our new vendor?" → SEND_TEMPLATE
 "What is our EIN number?" → SEARCH_DOCUMENTS (query: "EIN number")
 "How much revenue do we have?" → SEARCH_DOCUMENTS (query: "revenue")
 "Who invested in our company?" → SEARCH_DOCUMENTS (query: "investors")`;

@@ -192,9 +192,11 @@ class LegalDocumentOrganizer {
                   // Update metadata with Documenso information if uploaded
                   if (templateLink) {
                     metadata.documenso = {
-                      document_id: templateLink.documentId,
-                      status: 'uploaded',
+                      template_id: templateLink.documentId.toString(), // Convert to string for consistency
                       template_link: templateLink.templateCreationUrl,
+                      template_name: metadata.document_type || metadata.filename.replace(/\.[^/.]+$/, ''), // User-friendly name
+                      template_uploaded_at: new Date().toISOString(),
+                      status: 'template_created',
                       uploaded_at: new Date().toISOString()
                     };
                     

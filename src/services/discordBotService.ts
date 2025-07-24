@@ -10,6 +10,9 @@ import { NaturalLanguageProcessor } from './naturalLanguageProcessor';
 import { ConversationManager } from './conversationManager';
 import { EnhancedSmartSearchService } from './enhancedSmartSearchService';
 import { UnifiedSearchResult } from '../types/searchTypes';
+import { TemplateRegistryService } from './templateRegistryService';
+import { TemplateWorkflowService } from './templateWorkflowService';
+import { DocumensoService } from './documensoService';
 // import { TemplateManagementService } from './templateManagementService';
 import { BotIntent, BotResponse, SearchResult } from '../types';
 
@@ -22,6 +25,8 @@ export class DiscordBotService {
   private nlp: NaturalLanguageProcessor;
   private conversationManager: ConversationManager;
   private searchService: EnhancedSmartSearchService;
+  private templateRegistry: TemplateRegistryService | null = null;
+  private templateWorkflow: TemplateWorkflowService | null = null;
   // private templateService: TemplateManagementService | null = null;
   private organizeFolderPath: string;
   private tempDir: string;
@@ -65,20 +70,32 @@ export class DiscordBotService {
     // Set metadata service in organizer
     this.organizer.setMetadataService(this.metadataService);
 
-    // Initialize template service if Documenso credentials provided
-    // if (documensoApiUrl && documensoApiToken) {
-    //   this.templateService = new TemplateManagementService(
-    //     organizeFolderPath,
-    //     this.metadataService,
-    //     this.searchService,
-    //     documensoApiUrl,
-    //     documensoApiToken,
-    //     documensoAppUrl
-    //   );
-    //   console.log('📄 Documenso template integration enabled');
-    // } else {
-    //   console.log('⚠️  Documenso credentials not provided - template upload features disabled');
-    // }
+    // Initialize template services if Documenso credentials provided
+    if (documensoApiUrl && documensoApiToken) {
+      // Initialize template registry
+      this.templateRegistry = new TemplateRegistryService(organizeFolderPath);
+      this.templateRegistry.initialize().catch(error => {
+        console.error('Failed to initialize template registry:', error);
+      });
+
+      // Initialize Documenso service
+      const documensoService = new DocumensoService({
+        apiUrl: documensoApiUrl,
+        apiToken: documensoApiToken,
+        appUrl: documensoAppUrl
+      });
+
+      // Initialize template workflow service
+      this.templateWorkflow = new TemplateWorkflowService(
+        this.templateRegistry,
+        documensoService,
+        this.conversationManager
+      );
+
+      console.log('📄 Documenso template workflow integration enabled');
+    } else {
+      console.log('⚠️  Documenso credentials not provided - template features disabled');
+    }
 
     this.setupEventHandlers(token);
   }
@@ -91,6 +108,13 @@ export class DiscordBotService {
       this.client.guilds.cache.forEach(guild => {
         console.log(`  📍 Server: ${guild.name} (${guild.memberCount} members)`);
       });
+      
+      // Set up workflow cleanup interval
+      if (this.templateWorkflow) {
+        setInterval(() => {
+          this.templateWorkflow!.cleanupStaleWorkflows();
+        }, 5 * 60 * 1000); // Run every 5 minutes
+      }
     });
 
     this.client.on('messageCreate', async (message) => {
@@ -177,6 +201,28 @@ export class DiscordBotService {
         const resolution = await this.conversationManager.resolveContextualReferences(contextId, messageContent);
         resolvedMessage = resolution.resolvedMessage;
         referencedItem = resolution.referencedItem;
+      }
+
+      // Check if user has an active template workflow
+      if (this.templateWorkflow?.hasActiveWorkflow(message.author.id) && !hasAttachments) {
+        // Continue the workflow regardless of detected intent
+        console.log(`📋 Continuing template workflow for ${message.author.username}`);
+        const workflowResponse = await this.templateWorkflow.continueWorkflow(
+          message.author.id,
+          messageContent
+        );
+        const response: BotResponse = {
+          content: workflowResponse.message,
+          embeds: workflowResponse.embed ? [workflowResponse.embed] : undefined
+        };
+        
+        // Send response
+        await message.reply({
+          content: response.content,
+          embeds: response.embeds?.map(embed => new EmbedBuilder(embed as any))
+        });
+        
+        return; // Exit early
       }
 
       // Process the message to determine intent
@@ -292,6 +338,25 @@ export class DiscordBotService {
               followUpSuggestions: ["Search for templates", "Get help"]
             };
           // }
+          break;
+        case 'SEND_TEMPLATE':
+          if (!this.templateWorkflow) {
+            response = {
+              content: "⚠️ Template sending is not available. Documenso integration is not configured.",
+              followUpSuggestions: ["Search for templates", "Get help"]
+            };
+          } else {
+            // Always start a new workflow for SEND_TEMPLATE intent
+            // The workflow service will handle any existing workflows
+            const workflowResponse = await this.templateWorkflow.startWorkflow(
+              message.author.id,
+              intent
+            );
+            response = {
+              content: workflowResponse.message,
+              embeds: workflowResponse.embed ? [workflowResponse.embed] : undefined
+            };
+          }
           break;
 
         case 'HELP':
@@ -604,6 +669,9 @@ Just talk to me naturally - no special commands needed!`,
           break;
         case 'UPLOAD_TO_DOCUMENSO':
           threadName += 'Documenso Upload';
+          break;
+        case 'SEND_TEMPLATE':
+          threadName += 'Send Template';
           break;
         case 'HELP':
           threadName += 'Help';

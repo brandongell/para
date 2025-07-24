@@ -125,7 +125,7 @@ class FolderOnboarder {
       
       this.cli.displaySuccess(`\n✅ Onboarding complete for: ${absolutePath}`);
       this.cli.displayInfo('📂 Your documents are now organized in the PARA structure!');
-      this.cli.displayInfo('🧠 Memory files are available in the _memory folder');
+      this.cli.displayInfo('🧠 Memory files are available in the memory folder');
       this.cli.close();
       
     } catch (error) {

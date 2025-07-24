@@ -6,7 +6,6 @@ import { MetadataService } from './metadataService';
 export class FileOrganizerService {
   private metadataService: MetadataService | null = null;
   private folderStructure: FolderStructure = {
-    '_memory': [], // Special folder for memory files
     '01_Corporate_and_Governance': [
       'Formation_and_Structure',
       'Board_and_Stockholder_Governance', 
@@ -271,7 +270,7 @@ export class FileOrganizerService {
         }
       } else if (stat.isDirectory()) {
         // Skip the organized folders we create and the memory folder
-        if (!Object.keys(this.folderStructure).includes(item) && item !== '_memory') {
+        if (!Object.keys(this.folderStructure).includes(item) && item !== 'memory') {
           const subFiles = await this.getAllFiles(fullPath);
           files.push(...subFiles);
         }

@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import FormData = require('form-data');
 import fetch from 'node-fetch';
-import { DocumentMetadata } from '../types';
+import { DocumentMetadata, DocumensoTemplateField } from '../types';
 
 export interface DocumensoConfig {
   apiUrl: string;
@@ -42,6 +42,26 @@ export interface DocumensoCreateResponse {
     role: string;
     signingOrder: number;
     signingUrl: string;
+  }>;
+}
+
+export interface DocumensoTemplate {
+  id: string;
+  title: string;
+  fields: Array<{
+    id: string;
+    name: string;
+    type: string;
+    required: boolean;
+    placeholder?: string;
+    defaultValue?: string;
+  }>;
+  recipients: Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    signingOrder: number;
   }>;
 }
 
@@ -266,6 +286,151 @@ export class DocumensoService {
       return await response.json();
     } catch (error) {
       console.error('❌ Failed to create document from template:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get template details including fields
+   */
+  async getTemplate(templateId: string): Promise<DocumensoTemplate | null> {
+    try {
+      const response = await fetch(
+        `${this.config.apiUrl}/api/v1/templates/${templateId}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': this.config.apiToken,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null;
+        }
+        throw new Error(`Failed to get template: ${response.status}`);
+      }
+
+      return await response.json() as DocumensoTemplate;
+    } catch (error) {
+      console.error('❌ Failed to get template from Documenso:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get template fields
+   */
+  async getTemplateFields(templateId: string): Promise<DocumensoTemplateField[]> {
+    try {
+      const template = await this.getTemplate(templateId);
+      if (!template) {
+        throw new Error('Template not found');
+      }
+
+      // Transform Documenso fields to our format
+      return template.fields.map(field => ({
+        id: field.id,
+        name: field.name,
+        type: this.mapFieldType(field.type),
+        required: field.required,
+        placeholder: field.placeholder,
+        defaultValue: field.defaultValue,
+        description: field.placeholder // Use placeholder as description for now
+      }));
+    } catch (error) {
+      console.error('❌ Failed to get template fields:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Map Documenso field types to our types
+   */
+  private mapFieldType(documensoType: string): 'text' | 'email' | 'date' | 'number' | 'signature' | 'initials' {
+    const typeMap: Record<string, 'text' | 'email' | 'date' | 'number' | 'signature' | 'initials'> = {
+      'TEXT': 'text',
+      'EMAIL': 'email',
+      'DATE': 'date',
+      'NUMBER': 'number',
+      'SIGNATURE': 'signature',
+      'INITIALS': 'initials'
+    };
+
+    return typeMap[documensoType.toUpperCase()] || 'text';
+  }
+
+  /**
+   * Create and send document from template in one operation
+   */
+  async createAndSendDocument(
+    templateId: string,
+    recipients: Array<{ name: string; email: string; signingOrder?: number }>,
+    formValues?: Record<string, string>,
+    options?: {
+      title?: string;
+      message?: string;
+      subject?: string;
+    }
+  ): Promise<{
+    documentId: number;
+    recipients: Array<{
+      email: string;
+      signingUrl: string;
+    }>;
+  }> {
+    try {
+      // Create document from template
+      const createResult = await this.createDocumentFromTemplate(templateId, recipients, formValues);
+      
+      // Send the document for signing
+      if (createResult.status === 'DRAFT') {
+        const sendPayload = {
+          subject: options?.subject || 'Please sign this document',
+          message: options?.message || 'You have been requested to sign this document.',
+          sendDocument: true
+        };
+
+        const sendResponse = await fetch(
+          `${this.config.apiUrl}/api/v1/documents/${createResult.documentId}/send`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': this.config.apiToken,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(sendPayload)
+          }
+        );
+
+        if (!sendResponse.ok) {
+          const errorText = await sendResponse.text();
+          throw new Error(`Failed to send document: ${sendResponse.status} - ${errorText}`);
+        }
+
+        const sendResult = await sendResponse.json();
+        
+        return {
+          documentId: createResult.documentId,
+          recipients: (sendResult as any)?.recipients || createResult.recipients?.map((r: any) => ({
+            email: r.email,
+            signingUrl: r.signingUrl
+          })) || []
+        };
+      }
+
+      // Document was already sent
+      return {
+        documentId: createResult.documentId,
+        recipients: createResult.recipients?.map((r: any) => ({
+          email: r.email,
+          signingUrl: r.signingUrl
+        })) || []
+      };
+    } catch (error) {
+      console.error('❌ Failed to create and send document:', error);
       throw error;
     }
   }
