@@ -632,6 +632,13 @@ Just talk to me naturally - no special commands needed!`,
 
     } catch (error) {
       console.error('❌ Error handling message:', error);
+      // Only send error message if we haven't already sent a response
+      // Check if the error is from thread creation after successful response
+      if (error instanceof Error && error.message.includes('already has a thread')) {
+        console.log('Ignoring thread creation error - response was already sent');
+        return;
+      }
+      // For other errors, send error message
       await message.reply('I encountered an error processing your request. Please try again!');
     }
   }
@@ -955,24 +962,40 @@ Just talk to me naturally - no special commands needed!`,
       await this.sendResponseToThread(thread, response);
 
       // Update conversation context to use thread ID
-      await this.conversationManager.updateContext(thread.id, intent, message.content, []);
+      try {
+        await this.conversationManager.updateContext(thread.id, intent, message.content, []);
+      } catch (contextError) {
+        console.error('Error updating conversation context:', contextError);
+        // Don't throw - we already sent the response successfully
+      }
 
     } catch (error) {
-      console.error('❌ Error creating thread:', error);
+      console.error('❌ Error in createThreadAndRespond:', error);
+      
+      // Check if we successfully created a thread before the error
+      // This can happen if the thread was created but something failed afterward
+      const hasThread = ('thread' in message.channel && message.channel.thread) || 
+                       message.hasThread;
+      
+      if (hasThread) {
+        console.log('Thread was created successfully despite error - ignoring error');
+        return; // Don't send any error messages
+      }
       
       // Check for specific Discord API errors
       if (error instanceof Error) {
         if (error.message.includes('Missing Access')) {
           await message.reply('I don\'t have permission to create threads in this channel. Please contact an admin to grant me the "Create Public Threads" permission.');
         } else if (error.message.includes('already has a thread')) {
-          // Message already has a thread, just send response normally
-          console.log('Message already has a thread, sending response normally');
-          await this.sendResponse(message, response);
+          // Message already has a thread - don't send another response
+          console.log('Message already has a thread - likely from a previous attempt');
+          return; // Don't send any error messages
         } else {
-          await message.reply(`I encountered an error creating a thread: ${error.message}. Please try again or send me a DM.`);
+          // For other errors, send error message but not the original response
+          await message.reply(`I encountered an error creating a thread: ${error.message}`);
         }
       } else {
-        await message.reply('I encountered an error creating a conversation thread. Please try again or send me a direct message.');
+        await message.reply('I encountered an error creating a conversation thread. Please try again.');
       }
     }
   }
