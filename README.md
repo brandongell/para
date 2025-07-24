@@ -27,9 +27,9 @@ This system uses **Google Gemini's multimodal capabilities** to analyze PDFs vis
 
 **Example Success**: On test document NMM.pdf, traditional extraction found only 1 signer (Dan Shipper), but Gemini finds both signers (Dan Shipper + Nashilu Mouen) with complete contact information.
 
-## 🧠 Enhanced Memory System
+## 🧠 Enhanced Memory System with Claude Code Search
 
-The enhanced memory system captures comprehensive information from documents and aggregates it into searchable markdown files:
+The enhanced memory system captures comprehensive information from documents and aggregates it into searchable markdown files, now with Claude Code autonomous search capabilities:
 
 ### Core Memory Files:
 - **Company Information**: EIN, addresses, formation details, milestones
@@ -46,6 +46,16 @@ The system now extracts and preserves:
 - **Obligations**: All specific deliverables, milestones, and requirements
 - **Financial Terms**: Payment schedules, pricing models, revenue shares, minimum commitments
 - **Critical Facts**: Document-specific information like EIN numbers, policy numbers, addresses
+
+### 🤖 Claude Code Autonomous Search (NEW):
+When you ask a question, Claude Code:
+1. **Searches memory files** for quick answers
+2. **Identifies information gaps** and what's still needed
+3. **Reads full documents** to extract missing details
+4. **Continues searching** until it finds complete answers
+5. **Provides comprehensive responses** with source citations
+
+Example: "How much has Austin Rief invested?" → Claude finds the amount in memory, then reads the full SAFE agreement to extract valuation cap, discount rate, and other terms.
 
 Memory files are automatically updated when new documents are added and enable instant detailed answers via Discord.
 
@@ -122,6 +132,10 @@ ORGANIZE_FOLDER_PATH=/path/to/your/documents
 DOCUMENSO_API_URL=https://api.documenso.com
 DOCUMENSO_API_TOKEN=your_documenso_api_token_here
 DOCUMENSO_APP_URL=https://app.documenso.com
+
+# Optional for Claude Code enhanced search
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+CLAUDE_CODE_MAX_ITERATIONS=10
 ```
 
 ## 🎮 Usage

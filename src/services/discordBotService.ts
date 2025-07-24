@@ -14,6 +14,7 @@ import { TemplateRegistryService } from './templateRegistryService';
 import { TemplateWorkflowService } from './templateWorkflowService';
 import { DocumensoService } from './documensoService';
 import { DocumentQuestionService } from './documentQuestionService';
+import { ClaudeCodeSearchAgent } from './claudeCodeSearchAgent';
 // import { TemplateManagementService } from './templateManagementService';
 import { BotIntent, BotResponse, SearchResult } from '../types';
 
@@ -27,6 +28,7 @@ export class DiscordBotService {
   private conversationManager: ConversationManager;
   private searchService: EnhancedSmartSearchService;
   private questionService: DocumentQuestionService;
+  private claudeSearchAgent: ClaudeCodeSearchAgent | null = null;
   private templateRegistry: TemplateRegistryService | null = null;
   private templateWorkflow: TemplateWorkflowService | null = null;
   // private templateService: TemplateManagementService | null = null;
@@ -69,6 +71,19 @@ export class DiscordBotService {
     this.conversationManager = new ConversationManager();
     this.searchService = new EnhancedSmartSearchService(organizeFolderPath, openaiApiKey, geminiApiKey);
     this.questionService = new DocumentQuestionService(openaiApiKey, organizeFolderPath, geminiApiKey);
+    
+    // Initialize Claude Code search agent if API key is available
+    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+    if (anthropicApiKey) {
+      this.claudeSearchAgent = new ClaudeCodeSearchAgent(
+        organizeFolderPath,
+        anthropicApiKey,
+        geminiApiKey
+      );
+      console.log('🤖 Claude Code Search Agent initialized for enhanced search');
+    } else {
+      console.log('⚠️  ANTHROPIC_API_KEY not found - Claude Code search features disabled');
+    }
 
     // Set metadata service in organizer
     this.organizer.setMetadataService(this.metadataService);
@@ -406,34 +421,34 @@ export class DiscordBotService {
           break;
 
         case 'SEARCH_DOCUMENTS':
-          // Check if this is a direct question that should use the question service
           const originalQuery = messageContent;
-          const isDirectQuestion = this.isDirectQuestion(originalQuery);
           
-          if (isDirectQuestion) {
-            console.log('🤔 Detected direct question - using DocumentQuestionService');
+          console.log(`📊 SEARCH_DOCUMENTS intent detected`);
+          console.log(`  - Query: "${originalQuery}"`);
+          console.log(`  - Claude agent available: ${!!this.claudeSearchAgent}`);
+          
+          try {
+            // Show typing indicator while processing
+            if ('sendTyping' in message.channel) {
+              await message.channel.sendTyping();
+            }
             
-            try {
-              // Show typing indicator while processing
-              if ('sendTyping' in message.channel) {
-                await message.channel.sendTyping();
-              }
-              
-              // Use the new question service
-              const answer = await this.questionService.answerQuestion(originalQuery);
-              
+            // Always use Claude Code agent if available for ALL searches
+            if (this.claudeSearchAgent) {
+              console.log('🤖 Using Claude Code Search Agent for comprehensive search');
+              const answer = await this.claudeSearchAgent.answerQuestion(originalQuery);
               response = {
-                content: `**Answer:** ${answer}`,
+                content: answer,
                 followUpSuggestions: [
                   "Ask another question",
                   "Search for specific documents",
-                  "Get document details"
+                  "Get more details"
                 ]
               };
-            } catch (error) {
-              console.error('Error using question service:', error);
-              // Fall back to regular search
-              const searchResult = await this.searchService.search(intent.parameters.query || messageContent, {
+            } else {
+              // Fall back to basic search if Claude Code not available
+              console.log('📄 Using basic document search (Claude Code not available)');
+              const searchResult = await this.searchService.search(originalQuery, {
                 expandSynonyms: true,
                 fuzzyMatchThreshold: 0.6,
                 maxResults: 10,
@@ -442,40 +457,29 @@ export class DiscordBotService {
               
               const formattedResults = this.formatSearchResultsForResponse(searchResult);
               results = formattedResults;
-              response = await this.nlp.generateResponse(intent, { results: formattedResults }, context);
-            }
-          } else {
-            // Use regular search for non-question queries
-            const searchResult = await this.searchService.search(intent.parameters.query || messageContent, {
-              expandSynonyms: true,
-              fuzzyMatchThreshold: 0.6,
-              maxResults: 10,
-              useCache: true
-            });
-            
-            // Convert enhanced results to format expected by NLP
-            const formattedResults = this.formatSearchResultsForResponse(searchResult);
-            results = formattedResults;
-            
-            // If AI provided an answer, include it in the response
-            if (searchResult.answer) {
-              // Format AI answer with sources
-              const aiAnswerText = this.formatAIAnswerForDiscord(searchResult.answer);
               
-              // Get regular search response
-              const searchResponse = await this.nlp.generateResponse(intent, { 
-                results: formattedResults,
-                searchPath: searchResult.searchPath
-              }, context);
-              
-              // Combine AI answer with search results
-              response = {
-                content: aiAnswerText + '\n\n' + searchResponse.content,
-                followUpSuggestions: searchResponse.followUpSuggestions
-              };
-            } else {
-              response = await this.nlp.generateResponse(intent, { results: formattedResults }, context);
+              // If AI provided an answer, include it
+              if (searchResult.answer) {
+                const aiAnswerText = this.formatAIAnswerForDiscord(searchResult.answer);
+                const searchResponse = await this.nlp.generateResponse(intent, { 
+                  results: formattedResults,
+                  searchPath: searchResult.searchPath
+                }, context);
+                
+                response = {
+                  content: aiAnswerText + '\n\n' + searchResponse.content,
+                  followUpSuggestions: searchResponse.followUpSuggestions
+                };
+              } else {
+                response = await this.nlp.generateResponse(intent, { results: formattedResults }, context);
+              }
             }
+          } catch (error) {
+            console.error('❌ Error during search:', error);
+            response = {
+              content: `I encountered an error while searching. Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              followUpSuggestions: ["Try rephrasing your search", "Ask a different question"]
+            };
           }
           break;
 
@@ -923,6 +927,16 @@ Just talk to me naturally - no special commands needed!`,
 
       console.log(`🧵 Creating thread: ${threadName}`);
 
+      // Check if the message is in a valid channel type for threads
+      if (!message.channel.isTextBased() || message.channel.isDMBased()) {
+        console.error('❌ Cannot create thread: Not in a valid text channel');
+        await this.sendResponse(message, {
+          content: 'I can only create threads in text channels. Please try in a regular channel or send me a DM!',
+          followUpSuggestions: []
+        });
+        return;
+      }
+      
       // Create thread from the user's message
       const thread = await message.startThread({
         name: threadName,
@@ -942,8 +956,21 @@ Just talk to me naturally - no special commands needed!`,
 
     } catch (error) {
       console.error('❌ Error creating thread:', error);
-      // Instead of replying in channel, send a simple error message
-      await message.reply('I encountered an error creating a conversation thread. Please try again or send me a direct message.');
+      
+      // Check for specific Discord API errors
+      if (error instanceof Error) {
+        if (error.message.includes('Missing Access')) {
+          await message.reply('I don\'t have permission to create threads in this channel. Please contact an admin to grant me the "Create Public Threads" permission.');
+        } else if (error.message.includes('already has a thread')) {
+          // Message already has a thread, just send response normally
+          console.log('Message already has a thread, sending response normally');
+          await this.sendResponse(message, response);
+        } else {
+          await message.reply(`I encountered an error creating a thread: ${error.message}. Please try again or send me a DM.`);
+        }
+      } else {
+        await message.reply('I encountered an error creating a conversation thread. Please try again or send me a direct message.');
+      }
     }
   }
 
@@ -987,19 +1014,6 @@ Just talk to me naturally - no special commands needed!`,
     }
   }
 
-  /**
-   * Check if the message is a direct question that should use the question service
-   */
-  private isDirectQuestion(message: string): boolean {
-    const questionIndicators = [
-      /^(what|who|when|where|why|how|which|does|did|is|are|was|were|has|have|had|can|could|should|would|will)/i,
-      /\?$/,
-      /(how much|how many|what is|what are|who is|who are|when did|when was|where is|where are)/i,
-      /(tell me|show me|find out|do you know|can you tell)/i
-    ];
-    
-    return questionIndicators.some(pattern => pattern.test(message.trim()));
-  }
 
   /**
    * Format enhanced search results for Discord response
