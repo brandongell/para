@@ -70,6 +70,21 @@ export interface DocumentMetadata {
   confidentiality_level?: string; // e.g., "public", "internal", "confidential"
   approval_required?: string; // e.g., "board_approval", "ceo_approval", "standard_authority"
   
+  // Enhanced information capture fields
+  business_context?: string;  // Detailed narrative of business implications
+  key_terms?: string[];       // Array of important terms and conditions
+  obligations?: string[];     // Specific obligations and deliverables
+  financial_terms?: {        // Detailed financial information
+    payment_schedule?: string;
+    payment_terms?: string;
+    pricing_model?: string;
+    revenue_share?: string;
+    minimum_commitment?: string;
+    discounts?: string;
+    penalties?: string;
+    [key: string]: any;
+  };
+  
   // Critical facts - dynamically extracted based on document type
   critical_facts?: {
     [key: string]: string | number | boolean;
@@ -141,6 +156,11 @@ export interface ConversationContext {
   lastQuery?: string;
   lastResults?: any[];
   awaitingFollowUp: boolean;
+  pendingTemplateUploads?: Array<{
+    filename: string;
+    filepath: string;
+    metadata: DocumentMetadata;
+  }>;
   created: Date;
   updated: Date;
 }

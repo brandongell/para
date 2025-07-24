@@ -27,17 +27,27 @@ This system uses **Google Gemini's multimodal capabilities** to analyze PDFs vis
 
 **Example Success**: On test document NMM.pdf, traditional extraction found only 1 signer (Dan Shipper), but Gemini finds both signers (Dan Shipper + Nashilu Mouen) with complete contact information.
 
-## 🧠 Memory System
+## 🧠 Enhanced Memory System
 
-The memory system pre-indexes all document information into aggregated markdown files for instant retrieval:
+The enhanced memory system captures comprehensive information from documents and aggregates it into searchable markdown files:
 
+### Core Memory Files:
 - **Company Information**: EIN, addresses, formation details, milestones
 - **People Directory**: Employees, contractors, advisors, investors with contact info
-- **Financial Summary**: Total capital raised ($1.8M+), investment rounds, SAFE agreements
-- **Revenue & Sales**: Customer contracts, revenue streams, partnerships
+- **Financial Summary**: Total capital raised, investment rounds, SAFE agreements, financial impact analysis
+- **Revenue & Sales**: Customer contracts, revenue streams, business context, payment terms, obligations
+- **Contracts Summary**: Active contracts, expiring soon, business context, key provisions, obligations
 - **Key Dates**: Contract expirations, renewal deadlines, vesting schedules
 
-Memory files are automatically updated when new documents are added and enable instant answers via Discord.
+### Enhanced Information Capture:
+The system now extracts and preserves:
+- **Business Context**: 3-5 sentence narratives explaining strategic importance and implications
+- **Key Terms**: 5-15 most important contractual provisions and conditions
+- **Obligations**: All specific deliverables, milestones, and requirements
+- **Financial Terms**: Payment schedules, pricing models, revenue shares, minimum commitments
+- **Critical Facts**: Document-specific information like EIN numbers, policy numbers, addresses
+
+Memory files are automatically updated when new documents are added and enable instant detailed answers via Discord.
 
 ## 📝 Template Identification & Documenso Integration
 
@@ -48,6 +58,8 @@ The system automatically identifies template documents using intelligent pattern
 - **Smart Exclusion**: Won't mark EXECUTED or signed documents as templates
 
 ### 🆕 Automatic Documenso Upload Prompt
+
+When you upload a template file to Discord, Para automatically detects it and offers to upload it to Documenso for e-signature workflows. Just reply "yes" to upload!
 
 When a template is detected and Documenso is configured, the system will:
 1. **Prompt you** to upload the template to Documenso
@@ -181,7 +193,16 @@ npx ts-node test-production-workflow.ts
 # Test template identification
 npx ts-node test-template-prompt.ts
 npx ts-node test-mnda-form.ts
+
+# Test enhanced information capture
+npx ts-node test-enhanced-information-capture.ts <path-to-document>
 ```
+
+The enhanced information capture test will show:
+- All extracted metadata fields including business context
+- Key terms and obligations found in the document
+- Financial terms and critical facts
+- Which memory files were updated with the information
 
 ## 📁 Folder Structure
 

@@ -98,6 +98,73 @@ Para: ✅ Document sent successfully!
 2. **Template fields must be configured**: Set up fields in Documenso UI
 3. **Valid API credentials**: Ensure Documenso integration is configured
 
+## 🎯 NEW: Automatic Template Upload Prompt
+
+Para now automatically detects when you upload template files to Discord and offers to upload them to Documenso!
+
+### How It Works
+
+1. **Upload a template file** to Discord (PDF with template indicators)
+2. **Para detects it's a template** during organization
+3. **Prompts you to upload** to Documenso
+4. **One-click upload** with "yes" or "upload to documenso"
+
+### Example Workflow
+
+```
+User: [uploads MNDA_Form.pdf to Discord]
+
+Para: ✅ Successfully organized 1 file!
+      
+      📄 File: MNDA_Form.pdf
+      📁 Location: 09_Templates/Legal_Forms
+      🎯 Category: Templates
+      ⚡ Status: template
+      
+      📄 **Template Detected!**
+      I noticed you uploaded a template: MNDA_Form.pdf
+      
+      Would you like me to upload it to Documenso so you can send it for signatures later? 
+      Just reply with "yes" or "upload to documenso" and I'll set it up for you!
+
+User: yes
+
+Para: 📄 **Documenso Template Upload Results**
+
+      ✅ **MNDA_Form.pdf**
+         📄 Document ID: 456
+         🔗 [Configure Template Fields](https://app.documenso.com/documents/456/convert-to-template)
+
+      **Next Steps:**
+      1. Click the links above to configure template fields in Documenso
+      2. Once configured, you can send templates using commands like:
+         • "Send the MNDA to john@example.com"
+         • "Send employment agreement to new.hire@company.com"
+
+      💡 **Tip:** Template configuration includes setting up signature fields, text fields, and recipient roles.
+```
+
+### Features
+
+- **Automatic detection**: No need to manually identify templates
+- **Batch support**: Upload multiple templates at once
+- **Smart prompting**: Only prompts for actual templates
+- **Metadata tracking**: Updates document metadata with Documenso IDs
+- **Error handling**: Clear feedback if uploads fail
+
+### When It Triggers
+
+The upload prompt appears when:
+- ✅ File has template indicators ([BLANK], [FORM], [TEMPLATE])
+- ✅ File is classified as a template during organization
+- ✅ Documenso integration is configured
+- ✅ File is a PDF (required by Documenso)
+
+The prompt does NOT appear for:
+- ❌ Regular documents (not templates)
+- ❌ Non-PDF files
+- ❌ When Documenso is not configured
+
 ### Tips for Success
 
 - **Prepare templates properly**: Add all required fields in Documenso

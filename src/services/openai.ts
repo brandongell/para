@@ -332,6 +332,26 @@ Each party object should include:
 - email: Email address (if provided in document)
 - role: Party's role in the agreement (e.g., "Company", "Investor", "Employee", "Contractor", "Advisor")
 
+ENHANCED INFORMATION CAPTURE FIELDS (ALL REQUIRED):
+
+1. business_context (string): A detailed 3-5 sentence narrative explaining the business importance and implications
+
+2. key_terms (array of strings): 5-15 most important terms, conditions, or provisions
+
+3. obligations (array of strings): All specific deliverables, milestones, or requirements
+
+4. financial_terms (object): Comprehensive financial information including:
+   - payment_schedule
+   - payment_terms
+   - pricing_model
+   - revenue_share
+   - minimum_commitment
+   - discounts
+   - penalties
+   - Any other financial provisions
+
+5. critical_facts (object): Any other important information as key-value pairs
+
 RESPONSE FORMAT:
 You must respond with a JSON object containing all the metadata fields. 
 
@@ -543,11 +563,48 @@ FILENAME: ${cleanFilename}
 ORIGINAL FILENAME (if different): ${filename !== cleanFilename ? filename : 'N/A'}
 
 DOCUMENT CONTENT:
-${cleanedContent.length > 8000 ? 
-  cleanedContent.substring(0, 4000) + '\n\n[... MIDDLE CONTENT TRUNCATED ...]\n\n' + cleanedContent.substring(cleanedContent.length - 4000) : 
+${cleanedContent.length > 10000 ? 
+  cleanedContent.substring(0, 5000) + '\n\n[... MIDDLE CONTENT TRUNCATED ...]\n\n' + cleanedContent.substring(cleanedContent.length - 5000) : 
   cleanedContent}
 
-Analyze the document content carefully and extract all available metadata as JSON.`;
+CRITICAL INSTRUCTIONS FOR COMPREHENSIVE INFORMATION EXTRACTION:
+
+YOU MUST BE EXTREMELY THOROUGH. Extract EVERYTHING important from this document:
+
+1. BUSINESS CONTEXT (Required): Write a detailed 3-5 sentence narrative explaining:
+   - What this document accomplishes for the business
+   - Strategic importance and business implications
+   - Key risks, opportunities, or notable provisions
+   - Why this document matters to the company
+
+2. KEY TERMS (Required): Extract 5-15 of the MOST IMPORTANT terms, conditions, or provisions as an array of strings. Include:
+   - Major contractual obligations
+   - Important rights and restrictions
+   - Significant conditions or requirements
+   - Notable exclusions or limitations
+
+3. OBLIGATIONS (Required): List ALL specific deliverables, milestones, requirements, or commitments
+
+4. FINANCIAL TERMS (Required): Extract EVERYTHING money-related:
+   - All payment amounts and schedules
+   - Pricing models, rates, and structures
+   - Revenue shares, commissions, or fees
+   - Discounts, penalties, credits, or adjustments
+   - Minimum commitments, caps, or thresholds
+   - Budget allocations or cost breakdowns
+
+5. CRITICAL FACTS (Required): ANY other important information, such as:
+   - Product names, SKUs, or service descriptions
+   - Important dates, deadlines, or time periods
+   - Performance metrics, SLAs, or KPIs
+   - Geographic territories or restrictions
+   - Exclusivity or non-compete provisions
+   - Intellectual property assignments or licenses
+   - Unique provisions or unusual terms
+   - Contact information or key personnel
+   - Any industry-specific details
+
+Extract ALL standard metadata fields PLUS these enhanced fields. Be EXHAUSTIVE - we want to capture EVERY important detail for future reference and search.`;
   }
 
   private cleanPdfContent(content: string): string {

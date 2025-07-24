@@ -13,6 +13,7 @@ import { UnifiedSearchResult } from '../types/searchTypes';
 import { TemplateRegistryService } from './templateRegistryService';
 import { TemplateWorkflowService } from './templateWorkflowService';
 import { DocumensoService } from './documensoService';
+import { DocumentQuestionService } from './documentQuestionService';
 // import { TemplateManagementService } from './templateManagementService';
 import { BotIntent, BotResponse, SearchResult } from '../types';
 
@@ -25,6 +26,7 @@ export class DiscordBotService {
   private nlp: NaturalLanguageProcessor;
   private conversationManager: ConversationManager;
   private searchService: EnhancedSmartSearchService;
+  private questionService: DocumentQuestionService;
   private templateRegistry: TemplateRegistryService | null = null;
   private templateWorkflow: TemplateWorkflowService | null = null;
   // private templateService: TemplateManagementService | null = null;
@@ -66,6 +68,7 @@ export class DiscordBotService {
     this.nlp = new NaturalLanguageProcessor(openaiApiKey);
     this.conversationManager = new ConversationManager();
     this.searchService = new EnhancedSmartSearchService(organizeFolderPath, openaiApiKey, geminiApiKey);
+    this.questionService = new DocumentQuestionService(openaiApiKey, organizeFolderPath, geminiApiKey);
 
     // Set metadata service in organizer
     this.organizer.setMetadataService(this.metadataService);
@@ -203,6 +206,118 @@ export class DiscordBotService {
         referencedItem = resolution.referencedItem;
       }
 
+      // Check if user has pending template uploads and is confirming
+      if (context?.pendingTemplateUploads && context.pendingTemplateUploads.length > 0) {
+        const lowerMessage = messageContent.toLowerCase();
+        if (lowerMessage === 'yes' || lowerMessage.includes('upload') && lowerMessage.includes('documenso')) {
+          // User confirmed - process template uploads
+          console.log(`📄 User confirmed template upload to Documenso`);
+          
+          // Check if Documenso is configured
+          if (!this.templateWorkflow) {
+            // Don't reply directly - let it go through the thread creation flow
+            const errorResponse: BotResponse = {
+              content: '❌ Documenso integration is not configured. Please contact an administrator.',
+              followUpSuggestions: ["Get help", "Search for templates"]
+            };
+            
+            // Handle thread creation and response with a default intent
+            if (isMentioned && !isDM && !isInThread) {
+              const defaultIntent: BotIntent = { type: 'UPLOAD_TO_DOCUMENSO', confidence: 1, parameters: {} };
+              await this.createThreadAndRespond(message, errorResponse, defaultIntent);
+            } else {
+              await this.sendResponse(message, errorResponse);
+            }
+            return;
+          }
+          
+          const uploadResults: string[] = [];
+          const failedUploads: string[] = [];
+          
+          // Get DocumensoService from templateWorkflow
+          const documensoService = this.templateWorkflow.getDocumensoService();
+          
+          for (const template of context.pendingTemplateUploads) {
+            try {
+              console.log(`📤 Uploading template: ${template.filename} from ${template.filepath}`);
+              
+              // Upload to Documenso and get template link
+              const templateLink = await documensoService.createTemplateLink(
+                template.filepath,
+                template.metadata
+              );
+              
+              // Update metadata with Documenso information
+              const metadataPath = template.filepath + '.metadata.json';
+              if (fs.existsSync(metadataPath)) {
+                const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+                metadata.documenso = {
+                  ...metadata.documenso,
+                  documentId: templateLink.documentId,
+                  templateCreationUrl: templateLink.templateCreationUrl,
+                  uploadedAt: new Date().toISOString(),
+                  status: 'draft'
+                };
+                fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+                console.log(`✅ Updated metadata with Documenso info for ${template.filename}`);
+              }
+              
+              // Update template registry
+              if (this.templateRegistry) {
+                await this.templateRegistry.refreshRegistry();
+              }
+              
+              uploadResults.push(
+                `✅ **${template.filename}**\n` +
+                `   📄 Document ID: ${templateLink.documentId}\n` +
+                `   🔗 [Configure Template Fields](${templateLink.templateCreationUrl})`
+              );
+              
+            } catch (error) {
+              console.error(`Failed to upload template ${template.filename}:`, error);
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+              failedUploads.push(`❌ **${template.filename}** - ${errorMessage}`);
+            }
+          }
+          
+          // Build response
+          let responseContent = '📄 **Documenso Template Upload Results**\n\n';
+          
+          if (uploadResults.length > 0) {
+            responseContent += uploadResults.join('\n\n') + '\n\n';
+            responseContent += '**Next Steps:**\n';
+            responseContent += '1. Click the links above to configure template fields in Documenso\n';
+            responseContent += '2. Once configured, you can send templates using commands like:\n';
+            responseContent += '   • "Send the MNDA to john@example.com"\n';
+            responseContent += '   • "Send employment agreement to new.hire@company.com"\n\n';
+            responseContent += '💡 **Tip:** Template configuration includes setting up signature fields, text fields, and recipient roles.';
+          }
+          
+          if (failedUploads.length > 0) {
+            responseContent += '\n\n**Failed Uploads:**\n' + failedUploads.join('\n');
+          }
+          
+          // Clear pending uploads from context
+          context.pendingTemplateUploads = undefined;
+          await this.conversationManager.setContext(contextId, context);
+          
+          // Don't reply directly - let it go through the thread creation flow
+          const uploadResponse: BotResponse = {
+            content: responseContent,
+            followUpSuggestions: uploadResults.length > 0 ? ["Send template to someone", "Search for more templates"] : ["Search for templates", "Get help"]
+          };
+          
+          // Handle thread creation and response with a default intent
+          if (isMentioned && !isDM && !isInThread) {
+            const uploadIntent: BotIntent = { type: 'UPLOAD_TO_DOCUMENSO', confidence: 1, parameters: {} };
+            await this.createThreadAndRespond(message, uploadResponse, uploadIntent);
+          } else {
+            await this.sendResponse(message, uploadResponse);
+          }
+          return;
+        }
+      }
+
       // Check if user has an active template workflow
       if (this.templateWorkflow?.hasActiveWorkflow(message.author.id) && !hasAttachments) {
         // Continue the workflow regardless of detected intent
@@ -216,11 +331,22 @@ export class DiscordBotService {
           embeds: workflowResponse.embed ? [workflowResponse.embed] : undefined
         };
         
-        // Send response
-        await message.reply({
-          content: response.content,
-          embeds: response.embeds?.map(embed => new EmbedBuilder(embed as any))
-        });
+        // Handle thread creation and response (don't reply directly)
+        if (isMentioned && !isDM && !isInThread) {
+          // Need to create an intent for the workflow - it's a template sending workflow
+          const workflowIntent: BotIntent = { type: 'SEND_TEMPLATE', confidence: 1, parameters: {} };
+          await this.createThreadAndRespond(message, response, workflowIntent);
+        } else {
+          // For existing threads/DMs, send with embeds support
+          if (response.embeds && response.embeds.length > 0) {
+            await message.reply({
+              content: response.content,
+              embeds: response.embeds.map(embed => new EmbedBuilder(embed as any))
+            });
+          } else {
+            await this.sendResponse(message, response);
+          }
+        }
         
         return; // Exit early
       }
@@ -240,7 +366,37 @@ export class DiscordBotService {
           if (hasAttachments) {
             const organizationResults = await this.handleFileUploads(message.attachments, message);
             results = organizationResults;
+            
+            // Check if any uploaded files are templates
+            const hasTemplates = organizationResults.some(
+              result => result.success && result.metadata?.status === 'template'
+            );
+            
+            // Generate response based on NLP
             response = await this.nlp.generateResponse(intent, { results: organizationResults }, context);
+            
+            // If templates were detected and Documenso is configured, append upload prompt
+            if (hasTemplates && this.templateRegistry && this.templateWorkflow) {
+              const templateFiles = organizationResults
+                .filter(r => r.success && r.metadata?.status === 'template')
+                .map(r => r.filename);
+              
+              const templatePrompt = `\n\n📄 **Template${templateFiles.length > 1 ? 's' : ''} Detected!**\n` +
+                `I noticed you uploaded ${templateFiles.length > 1 ? 'these templates' : 'a template'}: ${templateFiles.join(', ')}\n\n` +
+                `Would you like me to upload ${templateFiles.length > 1 ? 'them' : 'it'} to Documenso so you can send ${templateFiles.length > 1 ? 'them' : 'it'} for signatures later? ` +
+                `Just reply with "yes" or "upload to documenso" and I'll set ${templateFiles.length > 1 ? 'them' : 'it'} up for you!`;
+              
+              response.content += templatePrompt;
+              
+              // Add follow-up suggestions
+              if (!response.followUpSuggestions) {
+                response.followUpSuggestions = [];
+              }
+              response.followUpSuggestions.push(
+                "Upload to Documenso",
+                "Yes, set up for signatures"
+              );
+            }
           } else {
             response = {
               content: "I'd be happy to organize files for you! Please attach the documents you'd like me to organize.",
@@ -250,35 +406,76 @@ export class DiscordBotService {
           break;
 
         case 'SEARCH_DOCUMENTS':
-          const searchResult = await this.searchService.search(intent.parameters.query || messageContent, {
-            expandSynonyms: true,
-            fuzzyMatchThreshold: 0.6,
-            maxResults: 10,
-            useCache: true
-          });
+          // Check if this is a direct question that should use the question service
+          const originalQuery = messageContent;
+          const isDirectQuestion = this.isDirectQuestion(originalQuery);
           
-          // Convert enhanced results to format expected by NLP
-          const formattedResults = this.formatSearchResultsForResponse(searchResult);
-          results = formattedResults;
-          
-          // If AI provided an answer, include it in the response
-          if (searchResult.answer) {
-            // Format AI answer with sources
-            const aiAnswerText = this.formatAIAnswerForDiscord(searchResult.answer);
+          if (isDirectQuestion) {
+            console.log('🤔 Detected direct question - using DocumentQuestionService');
             
-            // Get regular search response
-            const searchResponse = await this.nlp.generateResponse(intent, { 
-              results: formattedResults,
-              searchPath: searchResult.searchPath
-            }, context);
-            
-            // Combine AI answer with search results
-            response = {
-              content: aiAnswerText + '\n\n' + searchResponse.content,
-              followUpSuggestions: searchResponse.followUpSuggestions
-            };
+            try {
+              // Show typing indicator while processing
+              if ('sendTyping' in message.channel) {
+                await message.channel.sendTyping();
+              }
+              
+              // Use the new question service
+              const answer = await this.questionService.answerQuestion(originalQuery);
+              
+              response = {
+                content: `**Answer:** ${answer}`,
+                followUpSuggestions: [
+                  "Ask another question",
+                  "Search for specific documents",
+                  "Get document details"
+                ]
+              };
+            } catch (error) {
+              console.error('Error using question service:', error);
+              // Fall back to regular search
+              const searchResult = await this.searchService.search(intent.parameters.query || messageContent, {
+                expandSynonyms: true,
+                fuzzyMatchThreshold: 0.6,
+                maxResults: 10,
+                useCache: true
+              });
+              
+              const formattedResults = this.formatSearchResultsForResponse(searchResult);
+              results = formattedResults;
+              response = await this.nlp.generateResponse(intent, { results: formattedResults }, context);
+            }
           } else {
-            response = await this.nlp.generateResponse(intent, { results: formattedResults }, context);
+            // Use regular search for non-question queries
+            const searchResult = await this.searchService.search(intent.parameters.query || messageContent, {
+              expandSynonyms: true,
+              fuzzyMatchThreshold: 0.6,
+              maxResults: 10,
+              useCache: true
+            });
+            
+            // Convert enhanced results to format expected by NLP
+            const formattedResults = this.formatSearchResultsForResponse(searchResult);
+            results = formattedResults;
+            
+            // If AI provided an answer, include it in the response
+            if (searchResult.answer) {
+              // Format AI answer with sources
+              const aiAnswerText = this.formatAIAnswerForDiscord(searchResult.answer);
+              
+              // Get regular search response
+              const searchResponse = await this.nlp.generateResponse(intent, { 
+                results: formattedResults,
+                searchPath: searchResult.searchPath
+              }, context);
+              
+              // Combine AI answer with search results
+              response = {
+                content: aiAnswerText + '\n\n' + searchResponse.content,
+                followUpSuggestions: searchResponse.followUpSuggestions
+              };
+            } else {
+              response = await this.nlp.generateResponse(intent, { results: formattedResults }, context);
+            }
           }
           break;
 
@@ -395,8 +592,27 @@ Just talk to me naturally - no special commands needed!`,
           };
       }
 
-      // Update conversation context
-      await this.conversationManager.updateContext(contextId, intent, resolvedMessage || messageContent, results);
+      // Update conversation context with pending template uploads if applicable
+      const pendingTemplates = results
+        .filter(r => r?.success && r?.metadata?.status === 'template')
+        .map(r => ({
+          filename: r.filename,
+          filepath: r.organizationResult?.newPath || '',
+          metadata: r.metadata
+        }));
+      
+      const updatedContext = await this.conversationManager.updateContext(
+        contextId, 
+        intent, 
+        resolvedMessage || messageContent, 
+        results
+      );
+      
+      // Add pending templates to context if we detected any and asked about uploading
+      if (pendingTemplates.length > 0 && response.content.includes('Would you like me to upload')) {
+        updatedContext.pendingTemplateUploads = pendingTemplates;
+        this.conversationManager.setContext(contextId, updatedContext);
+      }
 
       // Handle thread creation and response
       if (isMentioned && !isDM && !isInThread) {
@@ -488,6 +704,14 @@ Just talk to me naturally - no special commands needed!`,
               // Update memory
               await this.memoryService.updateMemoryForDocument(organizationResult.newPath, metadata);
               console.log(`✅ Memory updated successfully`);
+              
+              // Check if it's a template and store info for Documenso prompt
+              if (metadata.status === 'template' && this.templateRegistry) {
+                console.log(`\n📄 Template detected! Will prompt for Documenso upload...`);
+                
+                // Update the template registry with the new template
+                await this.templateRegistry.refreshRegistry();
+              }
             } catch (memoryError) {
               console.error(`❌ Failed to update memory:`, memoryError);
               console.error(`   Document: ${organizationResult.newPath}`);
@@ -496,11 +720,23 @@ Just talk to me naturally - no special commands needed!`,
           }
         }
         
+        // Add metadata to result for template detection
+        let resultMetadata = null;
+        if (organizationResult.metadataPath && fs.existsSync(organizationResult.metadataPath)) {
+          try {
+            const metadataContent = fs.readFileSync(organizationResult.metadataPath, 'utf-8');
+            resultMetadata = JSON.parse(metadataContent);
+          } catch (e) {
+            console.error('Failed to read metadata for result:', e);
+          }
+        }
+        
         results.push({
           filename: attachment.name,
           classification,
           organizationResult,
-          success: organizationResult.success
+          success: organizationResult.success,
+          metadata: resultMetadata
         });
         
         // Send intermediate progress update for multiple files
@@ -706,8 +942,8 @@ Just talk to me naturally - no special commands needed!`,
 
     } catch (error) {
       console.error('❌ Error creating thread:', error);
-      // Fallback to regular reply if thread creation fails
-      await this.sendResponse(message, response);
+      // Instead of replying in channel, send a simple error message
+      await message.reply('I encountered an error creating a conversation thread. Please try again or send me a direct message.');
     }
   }
 
@@ -718,13 +954,25 @@ Just talk to me naturally - no special commands needed!`,
     // Split long messages if needed
     const maxLength = 2000;
     
+    // Prepare message options with embeds if present
+    const messageOptions: any = {};
+    if (response.embeds && response.embeds.length > 0) {
+      messageOptions.embeds = response.embeds.map(embed => new EmbedBuilder(embed as any));
+    }
+    
     if (response.content.length <= maxLength) {
-      await thread.send(response.content);
+      await thread.send({ content: response.content, ...messageOptions });
     } else {
       // Split the message
       const chunks = this.splitMessage(response.content, maxLength);
-      for (const chunk of chunks) {
-        await thread.send(chunk);
+      for (let i = 0; i < chunks.length; i++) {
+        if (i === 0) {
+          // Send first chunk with embeds
+          await thread.send({ content: chunks[i], ...messageOptions });
+        } else {
+          // Send remaining chunks without embeds
+          await thread.send(chunks[i]);
+        }
       }
     }
     
@@ -737,6 +985,20 @@ Just talk to me naturally - no special commands needed!`,
         await thread.send(suggestionsText);
       }
     }
+  }
+
+  /**
+   * Check if the message is a direct question that should use the question service
+   */
+  private isDirectQuestion(message: string): boolean {
+    const questionIndicators = [
+      /^(what|who|when|where|why|how|which|does|did|is|are|was|were|has|have|had|can|could|should|would|will)/i,
+      /\?$/,
+      /(how much|how many|what is|what are|who is|who are|when did|when was|where is|where are)/i,
+      /(tell me|show me|find out|do you know|can you tell)/i
+    ];
+    
+    return questionIndicators.some(pattern => pattern.test(message.trim()));
   }
 
   /**

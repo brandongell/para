@@ -1,9 +1,10 @@
 # Templates Inventory
-Last Updated: 2025-07-24T02:31:45.731Z
+Last Updated: 2025-07-24T02:53:52.251Z
 
 ## Quick Facts
-- Total templates available: 1 (Source: Template documents)
+- Total templates available: 2 (Source: Template documents)
 
 ## NDA Templates
 - Mutual Non-Disclosure Agreement Template [Source: MNDA Form.pdf]
+- Mutual Non-Disclosure Agreement Template [Source: MNDA_Form2.pdf]
 

@@ -42,6 +42,13 @@ export class TemplateWorkflowService {
   }
 
   /**
+   * Get the Documenso service instance
+   */
+  getDocumensoService(): DocumensoService {
+    return this.documensoService;
+  }
+
+  /**
    * Start a new template workflow
    */
   async startWorkflow(

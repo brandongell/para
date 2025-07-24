@@ -542,12 +542,15 @@ export class MemoryService {
         'SAFE Agreements': [],
         'Banking': [],
         'Insurance': [],
-        'Loans': []
+        'Loans': [],
+        'Financial Impact Analysis': [],
+        'Key Financial Terms': []
       }
     };
 
     let totalRaised = 0;
     const investmentsByRound = new Map<string, number>();
+    const investorDetails = new Map<string, { amount: number; documents: string[]; terms: any }>();
     
     // Extract financial critical facts
     const investmentFacts = this.extractCriticalFactsByPattern(documents, /investment_amount|round_size|principal_amount/);
@@ -559,11 +562,42 @@ export class MemoryService {
       const { path: docPath, metadata } = doc;
       const filename = path.basename(docPath);
       
+      // Process ANY document with financial terms or implications
+      if (metadata.financial_terms || metadata.business_context?.includes('invest') || 
+          metadata.business_context?.includes('financ') || metadata.contract_value) {
+        
+        // Add business context for financial documents
+        if (metadata.business_context) {
+          memory.sections['Financial Impact Analysis'].push({
+            fact: `${metadata.document_type || filename}: ${metadata.business_context}`,
+            source: filename
+          });
+        }
+        
+        // Add key financial terms
+        if (metadata.key_terms) {
+          metadata.key_terms.filter(term => 
+            term.toLowerCase().includes('invest') || 
+            term.toLowerCase().includes('financ') ||
+            term.toLowerCase().includes('capital') ||
+            term.toLowerCase().includes('equity')
+          ).forEach(term => {
+            memory.sections['Key Financial Terms'].push({
+              fact: term,
+              source: filename
+            });
+          });
+        }
+      }
+      
       // Process investment documents
-      if (metadata.document_type?.includes('SAFE') || filename.includes('SAFE')) {
+      if (metadata.document_type?.includes('SAFE') || filename.includes('SAFE') || 
+          metadata.category?.includes('Investment')) {
         // First try critical facts
         let investmentAmount = 0;
         let valuationCap = null;
+        let discountRate = null;
+        let mfnProvision = null;
         
         if (metadata.critical_facts) {
           if (metadata.critical_facts.investment_amount) {
@@ -572,6 +606,12 @@ export class MemoryService {
           if (metadata.critical_facts.valuation_cap) {
             valuationCap = Number(metadata.critical_facts.valuation_cap);
           }
+          if (metadata.critical_facts.discount_rate) {
+            discountRate = String(metadata.critical_facts.discount_rate);
+          }
+          if (metadata.critical_facts.mfn_provision !== undefined) {
+            mfnProvision = metadata.critical_facts.mfn_provision;
+          }
         }
         
         // Fall back to contract_value if no critical fact
@@ -579,23 +619,54 @@ export class MemoryService {
           investmentAmount = this.parseMonetaryValue(metadata.contract_value);
         }
         
+        // Extract ALL financial terms for comprehensive capture
+        const allFinancialDetails: string[] = [];
+        if (metadata.financial_terms) {
+          Object.entries(metadata.financial_terms).forEach(([key, value]) => {
+            if (value) {
+              allFinancialDetails.push(`${key.replace(/_/g, ' ')}: ${value}`);
+            }
+          });
+        }
+        
+        const investorName = this.getInvestorName(metadata);
+        
+        // Track investor details for aggregation
         if (investmentAmount > 0) {
+          const existing = investorDetails.get(investorName) || { amount: 0, documents: [], terms: {} };
+          existing.amount += investmentAmount;
+          existing.documents.push(filename);
+          if (valuationCap) existing.terms.valuation_cap = valuationCap;
+          if (discountRate) existing.terms.discount_rate = discountRate;
+          if (mfnProvision !== null) existing.terms.mfn = mfnProvision;
+          if (allFinancialDetails.length > 0) existing.terms.details = allFinancialDetails;
+          investorDetails.set(investorName, existing);
+          
           totalRaised += investmentAmount;
           
-          const safeFact = `SAFE Agreement with ${this.getInvestorName(metadata)}`;
+          const safeFact = `SAFE Agreement with ${investorName}`;
           const entry: MemoryEntry = {
             fact: safeFact,
             source: filename,
             value: `$${investmentAmount.toLocaleString()}`,
-            date: metadata.effective_date || undefined
+            date: metadata.effective_date || undefined,
+            metadata: {
+              valuation_cap: valuationCap ? `$${valuationCap.toLocaleString()}` : undefined,
+              discount_rate: discountRate,
+              mfn_provision: mfnProvision,
+              financial_details: allFinancialDetails.length > 0 ? allFinancialDetails.join('; ') : undefined
+            }
           };
           
-          // Add valuation cap if available
-          if (valuationCap) {
-            entry.metadata = { valuation_cap: `$${valuationCap.toLocaleString()}` };
-          }
-          
           memory.sections['SAFE Agreements'].push(entry);
+          
+          // Add comprehensive business context
+          if (metadata.business_context) {
+            memory.sections['Capital Raised'].push({
+              fact: `${investorName} Investment Context: ${metadata.business_context}`,
+              source: filename
+            });
+          }
         }
       }
       
@@ -604,12 +675,23 @@ export class MemoryService {
         if (metadata.contract_value) {
           const value = this.parseMonetaryValue(metadata.contract_value);
           if (value > 0) {
-            memory.sections['Investment Rounds'].push({
+            const investmentEntry: MemoryEntry = {
               fact: `Investment from ${this.getInvestorName(metadata)}`,
               source: filename,
               value: metadata.contract_value,
-              date: metadata.effective_date || undefined || undefined
-            });
+              date: metadata.effective_date || undefined
+            };
+            
+            // Add all available financial context
+            if (metadata.financial_terms || metadata.key_terms || metadata.business_context) {
+              investmentEntry.metadata = {
+                financial_terms: metadata.financial_terms,
+                key_provisions: metadata.key_terms?.slice(0, 3),
+                context: metadata.business_context
+              };
+            }
+            
+            memory.sections['Investment Rounds'].push(investmentEntry);
           }
         }
       }
@@ -631,19 +713,52 @@ export class MemoryService {
               ? `$${facts.coverage_amount.toLocaleString()}`
               : String(facts.coverage_amount);
           }
-          if (facts.carrier) {
-            insuranceEntry.metadata = { carrier: String(facts.carrier) };
-          }
+          
+          // Add all insurance details
+          insuranceEntry.metadata = {
+            carrier: facts.carrier ? String(facts.carrier) : undefined,
+            premium: facts.premium ? String(facts.premium) : undefined,
+            deductible: facts.deductible ? String(facts.deductible) : undefined,
+            policy_period: facts.policy_period ? String(facts.policy_period) : undefined
+          };
           
           memory.sections['Insurance'].push(insuranceEntry);
         }
       }
     }
     
+    // Add aggregated investor summary
+    const sortedInvestors = Array.from(investorDetails.entries())
+      .sort((a, b) => b[1].amount - a[1].amount);
+    
+    sortedInvestors.forEach(([name, details]) => {
+      const summaryEntry: MemoryEntry = {
+        fact: `${name} - Total Investment`,
+        value: `$${details.amount.toLocaleString()}`,
+        source: `${details.documents.length} documents`,
+        metadata: details.terms
+      };
+      
+      memory.sections['Capital Raised'].push(summaryEntry);
+      
+      // Add to quick facts for top investors
+      if (memory.quickFacts.length < 5) {
+        memory.quickFacts.push({
+          fact: `${name}: $${details.amount.toLocaleString()}`,
+          source: details.documents.join(', ')
+        });
+      }
+    });
+    
     // Add summary quick facts
     if (totalRaised > 0) {
       memory.quickFacts.push({
         fact: `Total capital raised: $${totalRaised.toLocaleString()}`,
+        source: 'All investment documents'
+      });
+      
+      memory.quickFacts.push({
+        fact: `Number of investors: ${investorDetails.size}`,
         source: 'All investment documents'
       });
     }
@@ -664,24 +779,36 @@ export class MemoryService {
         'Customer Agreements': [],
         'Revenue by Type': [],
         'Contract Values': [],
-        'Renewal Schedule': []
+        'Renewal Schedule': [],
+        'Payment Terms': [],
+        'Business Context': [],
+        'Key Obligations': [],
+        'Key Contract Terms': [],
+        'Revenue Impact Analysis': []
       }
     };
 
     let totalContractValue = 0;
     let customerCount = 0;
+    const revenueByType = new Map<string, number>();
     
     // Extract revenue information from documents
     for (const doc of documents) {
       const { path: docPath, metadata } = doc;
       const filename = path.basename(docPath);
       
-      // Look for customer agreements
+      // Look for customer agreements AND any document with revenue implications
       if (metadata.category === 'Sales_Customer_Agreements' || 
-          docPath.includes('04_Sales_and_Revenue')) {
+          docPath.includes('04_Sales_and_Revenue') ||
+          (metadata.financial_terms && Object.keys(metadata.financial_terms).length > 0) ||
+          (metadata.business_context && metadata.business_context.toLowerCase().includes('revenue'))) {
         
-        customerCount++;
+        // Only count as customer if it's actually a sales/customer agreement
+        if (metadata.category === 'Sales_Customer_Agreements' || docPath.includes('04_Sales_and_Revenue')) {
+          customerCount++;
+        }
         
+        // Extract contract value
         if (metadata.contract_value) {
           const value = this.parseMonetaryValue(metadata.contract_value);
           if (value > 0) {
@@ -692,21 +819,136 @@ export class MemoryService {
               fact: `${customerName} - ${metadata.document_type || 'Agreement'}`,
               source: filename,
               value: metadata.contract_value,
-              date: metadata.effective_date || undefined || undefined
+              date: metadata.effective_date || undefined
+            });
+            
+            // Track revenue by type
+            const docType = metadata.document_type || 'Other';
+            revenueByType.set(docType, (revenueByType.get(docType) || 0) + value);
+          }
+        }
+        
+        // Add business context if available - THIS IS CRITICAL FOR CAPTURING REVENUE INFO
+        if (metadata.business_context) {
+          memory.sections['Business Context'].push({
+            fact: metadata.business_context,
+            source: filename,
+            metadata: {
+              document_type: metadata.document_type,
+              parties: metadata.primary_parties?.map(p => p.name).join(', ')
+            }
+          });
+          
+          // If business context mentions specific revenue amounts or impacts, highlight them
+          const revenueMatches = metadata.business_context.match(/\$[\d,]+|revenue|income|sales/gi);
+          if (revenueMatches) {
+            memory.sections['Revenue Impact Analysis'].push({
+              fact: `${metadata.document_type || filename}: ${metadata.business_context}`,
+              source: filename
+            });
+          }
+        }
+        
+        // Add ALL financial terms details - comprehensive capture
+        if (metadata.financial_terms) {
+          const terms = metadata.financial_terms;
+          
+          // Create a comprehensive financial summary entry
+          const financialSummaryParts: string[] = [];
+          Object.entries(terms).forEach(([key, value]) => {
+            if (value) {
+              const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              financialSummaryParts.push(`${formattedKey}: ${value}`);
+              
+              // Add individual entries for important terms
+              memory.sections['Payment Terms'].push({
+                fact: `${this.getCounterpartyName(metadata)} - ${formattedKey}: ${value}`,
+                source: filename
+              });
+            }
+          });
+          
+          // Add comprehensive summary if we have multiple terms
+          if (financialSummaryParts.length > 1) {
+            memory.sections['Contract Values'].push({
+              fact: `${this.getCounterpartyName(metadata)} Financial Summary: ${financialSummaryParts.join('; ')}`,
+              source: filename
+            });
+          }
+        }
+        
+        // Add ALL key terms - these are the most important provisions
+        if (metadata.key_terms && metadata.key_terms.length > 0) {
+          // Add all terms to the Key Contract Terms section
+          metadata.key_terms.forEach(term => {
+            memory.sections['Key Contract Terms'].push({
+              fact: `${this.getCounterpartyName(metadata)}: ${term}`,
+              source: filename
+            });
+          });
+          
+          // Add the most important terms as quick facts
+          metadata.key_terms.slice(0, 5).forEach(term => {
+            memory.quickFacts.push({
+              fact: `Key Term: ${term}`,
+              source: filename
+            });
+          });
+        }
+        
+        // Add ALL obligations - these are critical for understanding commitments
+        if (metadata.obligations && metadata.obligations.length > 0) {
+          metadata.obligations.forEach(obligation => {
+            memory.sections['Key Obligations'].push({
+              fact: `${this.getCounterpartyName(metadata)}: ${obligation}`,
+              source: filename
+            });
+          });
+          
+          // Add a summary if there are many obligations
+          if (metadata.obligations.length > 3) {
+            memory.quickFacts.push({
+              fact: `${this.getCounterpartyName(metadata)} has ${metadata.obligations.length} key obligations`,
+              source: filename
             });
           }
         }
         
         // Track renewal dates
-        if (metadata.expiration_date) {
+        if (metadata.expiration_date && metadata.expiration_date !== 'indefinite') {
           memory.sections['Renewal Schedule'].push({
-            fact: `${this.getCounterpartyName(metadata)} renewal`,
+            fact: `${this.getCounterpartyName(metadata)} - ${metadata.document_type || 'Agreement'} renewal`,
             source: filename,
-            date: metadata.expiration_date
+            date: metadata.expiration_date,
+            metadata: {
+              renewal_terms: metadata.renewal_terms,
+              notice_period: metadata.notice_period
+            }
+          });
+        }
+        
+        // Extract revenue information from critical facts
+        if (metadata.critical_facts) {
+          Object.entries(metadata.critical_facts).forEach(([key, value]) => {
+            if (key.includes('revenue') || key.includes('sales') || key.includes('income') || 
+                key.includes('fee') || key.includes('payment') || key.includes('subscription')) {
+              memory.sections['Contract Values'].push({
+                fact: `${this.getCounterpartyName(metadata)} - ${key.replace(/_/g, ' ')}: ${value}`,
+                source: filename
+              });
+            }
           });
         }
       }
     }
+    
+    // Add revenue by type
+    revenueByType.forEach((value, type) => {
+      memory.sections['Revenue by Type'].push({
+        fact: `${type}: $${value.toLocaleString()}`,
+        source: 'Calculated from agreements'
+      });
+    });
     
     // Add summary quick facts
     if (totalContractValue > 0) {
@@ -949,10 +1191,59 @@ export class MemoryService {
       await this.generateCompanyInfo(documents);
       await this.generateLegalEntities(documents);
     }
+    // Check for revenue/sales documents
+    else if (metadata.category === 'Sales_Customer_Agreements' || 
+             metadata.category?.includes('Sales') ||
+             metadata.category?.includes('Customer') ||
+             metadata.category?.includes('Revenue') ||
+             documentPath.includes('04_Sales_and_Revenue')) {
+      console.log(`💵 Updating revenue and sales memory...`);
+      await this.generateRevenueAndSales(documents);
+      await this.generateContractsSummary(documents); // Also update contracts
+    }
     // For any document with signers, update people directory
     else if (metadata.signers && metadata.signers.length > 0) {
       console.log(`👥 Document has signers - updating people directory...`);
       await this.generatePeopleDirectory(documents);
+    }
+    
+    // Always update key dates if there are important dates
+    if (metadata.effective_date || metadata.expiration_date || metadata.fully_executed_date) {
+      console.log(`📅 Updating key dates timeline...`);
+      await this.generateKeyDatesTimeline(documents);
+    }
+    
+    // Always update contracts summary for any executed document
+    if (metadata.status === 'executed' || metadata.status === 'partially_executed') {
+      console.log(`📄 Updating contracts summary...`);
+      await this.generateContractsSummary(documents);
+    }
+    
+    // IMPORTANT: If we have rich information (business_context, key_terms, obligations), 
+    // make sure to update relevant memory files even if category doesn't match perfectly
+    if (metadata.business_context || 
+        (metadata.key_terms && metadata.key_terms.length > 0) || 
+        (metadata.obligations && metadata.obligations.length > 0) ||
+        metadata.financial_terms) {
+      console.log(`📊 Document contains rich information - updating additional memory files...`);
+      
+      // If it has financial terms, update financial memory
+      if (metadata.financial_terms || metadata.contract_value) {
+        console.log(`💰 Updating financial summary due to financial terms...`);
+        await this.generateFinancialSummary(documents);
+      }
+      
+      // If it's a business agreement of any kind, update revenue/sales
+      if (metadata.business_context && 
+          (metadata.category?.includes('Agreement') || 
+           metadata.document_type?.includes('Agreement'))) {
+        console.log(`💼 Updating revenue/sales due to business context...`);
+        await this.generateRevenueAndSales(documents);
+      }
+      
+      // Always update contracts summary for documents with rich context
+      console.log(`📋 Updating contracts summary due to rich context...`);
+      await this.generateContractsSummary(documents);
     }
     
     console.log(`✅ Memory update complete for ${path.basename(documentPath)}`);
@@ -1346,12 +1637,21 @@ export class MemoryService {
         'Active Contracts': [],
         'Expiring Soon': [],
         'Auto-Renewal Contracts': [],
-        'High-Value Contracts': []
+        'High-Value Contracts': [],
+        'Contract Business Context': [],
+        'Key Contract Provisions': [],
+        'Contract Obligations Summary': []
       }
     };
 
     let totalContracts = 0;
     let executedContracts = 0;
+    const contractsByCategory = new Map<string, number>();
+    const upcomingExpirations = [];
+    
+    // Get current date for expiration calculations
+    const now = new Date();
+    const threeMonthsFromNow = new Date(now.getTime() + (90 * 24 * 60 * 60 * 1000));
     
     for (const doc of documents) {
       const { metadata } = doc;
@@ -1359,28 +1659,123 @@ export class MemoryService {
       
       totalContracts++;
       
-      if (metadata.status === 'executed') {
+      // Track by category
+      const category = metadata.category || 'Other';
+      contractsByCategory.set(category, (contractsByCategory.get(category) || 0) + 1);
+      
+      if (metadata.status === 'executed' || metadata.status === 'partially_executed') {
         executedContracts++;
         
-        // High value contracts
+        // Add active contract with comprehensive details
+        const contractEntry: MemoryEntry = {
+          fact: `${metadata.document_type || filename} - ${this.getCounterpartyName(metadata)}`,
+          source: filename,
+          date: metadata.effective_date || undefined,
+          value: metadata.contract_value,
+          metadata: {
+            expiration: metadata.expiration_date,
+            renewal_terms: metadata.renewal_terms,
+            notice_period: metadata.notice_period,
+            governing_law: metadata.governing_law
+          }
+        };
+        
+        memory.sections['Active Contracts'].push(contractEntry);
+        
+        // High value contracts with context
         const value = this.parseMonetaryValue(metadata.contract_value || '0');
         if (value >= 50000) {
-          memory.sections['High-Value Contracts'].push({
-            fact: metadata.document_type || filename,
+          const highValueEntry: MemoryEntry = {
+            fact: `${metadata.document_type || filename} with ${this.getCounterpartyName(metadata)}`,
             source: filename,
             value: metadata.contract_value
+          };
+          
+          // Add business context for high-value contracts
+          if (metadata.business_context) {
+            highValueEntry.metadata = {
+              context: metadata.business_context,
+              key_terms: metadata.key_terms?.slice(0, 3)
+            };
+          }
+          
+          memory.sections['High-Value Contracts'].push(highValueEntry);
+        }
+        
+        // Check for expiring contracts
+        if (metadata.expiration_date && metadata.expiration_date !== 'indefinite' && metadata.expiration_date !== 'at-will') {
+          const expirationDate = new Date(metadata.expiration_date);
+          if (expirationDate <= threeMonthsFromNow && expirationDate >= now) {
+            memory.sections['Expiring Soon'].push({
+              fact: `${metadata.document_type || filename} with ${this.getCounterpartyName(metadata)}`,
+              source: filename,
+              date: metadata.expiration_date,
+              metadata: {
+                notice_period: metadata.notice_period,
+                renewal_terms: metadata.renewal_terms
+              }
+            });
+          }
+        }
+        
+        // Auto-renewal contracts
+        if (metadata.renewal_terms?.includes('automatic')) {
+          memory.sections['Auto-Renewal Contracts'].push({
+            fact: `${metadata.document_type || filename} with ${this.getCounterpartyName(metadata)}`,
+            source: filename,
+            metadata: {
+              renewal_terms: metadata.renewal_terms,
+              notice_period: metadata.notice_period
+            }
           });
         }
         
-        // Auto-renewal
-        if (metadata.renewal_terms?.includes('automatic')) {
-          memory.sections['Auto-Renewal Contracts'].push({
-            fact: metadata.document_type || filename,
+        // Capture business context for all executed contracts
+        if (metadata.business_context) {
+          memory.sections['Contract Business Context'].push({
+            fact: `${this.getCounterpartyName(metadata)} - ${metadata.document_type}: ${metadata.business_context}`,
             source: filename
           });
         }
+        
+        // Capture key provisions
+        if (metadata.key_terms && metadata.key_terms.length > 0) {
+          // Group by contract for better organization
+          const keyProvisionEntry: MemoryEntry = {
+            fact: `${this.getCounterpartyName(metadata)} - ${metadata.document_type || 'Agreement'}`,
+            source: filename,
+            metadata: {
+              provisions: metadata.key_terms
+            }
+          };
+          memory.sections['Key Contract Provisions'].push(keyProvisionEntry);
+        }
+        
+        // Capture obligations summary
+        if (metadata.obligations && metadata.obligations.length > 0) {
+          const obligationSummary: MemoryEntry = {
+            fact: `${this.getCounterpartyName(metadata)} - ${metadata.obligations.length} obligations`,
+            source: filename,
+            metadata: {
+              key_obligations: metadata.obligations.slice(0, 5) // Top 5 obligations
+            }
+          };
+          memory.sections['Contract Obligations Summary'].push(obligationSummary);
+        }
       }
     }
+    
+    // Add category breakdown to quick facts
+    const topCategories = Array.from(contractsByCategory.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+    
+    topCategories.forEach(([category, count]) => {
+      memory.quickFacts.push({
+        fact: `${category}: ${count} contracts`,
+        source: 'Contract analysis'
+      });
+    });
     
     memory.quickFacts.push({
       fact: `Total contracts: ${totalContracts}`,
@@ -1391,6 +1786,15 @@ export class MemoryService {
       fact: `Executed contracts: ${executedContracts}`,
       source: 'All documents'
     });
+    
+    // Add expiration warning if relevant
+    const expiringSoonCount = memory.sections['Expiring Soon'].length;
+    if (expiringSoonCount > 0) {
+      memory.quickFacts.push({
+        fact: `Contracts expiring within 90 days: ${expiringSoonCount}`,
+        source: 'Contract analysis'
+      });
+    }
     
     await this.saveMemoryFile('contracts_summary.md', memory);
   }

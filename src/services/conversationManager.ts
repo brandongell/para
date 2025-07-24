@@ -46,12 +46,17 @@ export class ConversationManager {
       lastQuery: query,
       lastResults: results,
       awaitingFollowUp: this.shouldAwaitFollowUp(intent, results),
+      pendingTemplateUploads: existingContext?.pendingTemplateUploads,
       created: existingContext?.created || now,
       updated: now
     };
     
     this.contexts.set(userId, context);
     return context;
+  }
+
+  async setContext(userId: string, context: ConversationContext): Promise<void> {
+    this.contexts.set(userId, context);
   }
 
   async clearContext(userId: string): Promise<void> {
