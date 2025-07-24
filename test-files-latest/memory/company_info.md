@@ -9,7 +9,7 @@ Last Updated: 2025-07-24T02:40:51.755Z
 - Incorporated in: Delaware [Source: Multiple documents]
 
 ## Tax Information
-- EIN NUMBER: null [Source: LEGAL 46339648v1 Every Media - EIN Confirmation Letter (1).PDF]
+- EIN NUMBER: 85-0989775 [Source: LEGAL 46339648v1 Every Media - EIN Confirmation Letter (1).PDF]
 
 ## Addresses
 - Every Media Inc.: 221 Canal Street, Floor 5 New York, NY 10013 [Source: Quinten Farmer.pdf]

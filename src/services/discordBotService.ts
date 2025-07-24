@@ -81,7 +81,10 @@ export class DiscordBotService {
         geminiApiKey
       );
       console.log('🤖 Claude Code Search Agent initialized for enhanced search');
+      console.log('  - Anthropic API key length:', anthropicApiKey.length);
+      console.log('  - Organization folder:', organizeFolderPath);
     } else {
+      console.log('⚠️  Claude Code Search Agent NOT initialized - no Anthropic API key');
       console.log('⚠️  ANTHROPIC_API_KEY not found - Claude Code search features disabled');
     }
 
