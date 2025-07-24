@@ -36,7 +36,7 @@ export class EnhancedSmartSearchService {
     
     // Initialize AI search if API key provided
     if (openAIApiKey) {
-      const memoryDir = path.join(organizedFolderPath, '_memory');
+      const memoryDir = path.join(organizedFolderPath, 'memory');
       this.aiSearchService = new AISearchService(openAIApiKey, memoryDir);
     }
   }

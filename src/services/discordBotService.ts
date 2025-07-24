@@ -5,6 +5,7 @@ import fetch from 'node-fetch';
 import { DocumentClassifierService } from './documentClassifier';
 import { FileOrganizerService } from './fileOrganizer';
 import { MetadataService } from './metadataService';
+import { MemoryService } from './memoryService';
 import { NaturalLanguageProcessor } from './naturalLanguageProcessor';
 import { ConversationManager } from './conversationManager';
 import { EnhancedSmartSearchService } from './enhancedSmartSearchService';
@@ -17,6 +18,7 @@ export class DiscordBotService {
   private classifier: DocumentClassifierService;
   private organizer: FileOrganizerService;
   private metadataService: MetadataService;
+  private memoryService: MemoryService;
   private nlp: NaturalLanguageProcessor;
   private conversationManager: ConversationManager;
   private searchService: EnhancedSmartSearchService;
@@ -55,6 +57,7 @@ export class DiscordBotService {
     this.classifier = new DocumentClassifierService(openaiApiKey, geminiApiKey);
     this.organizer = new FileOrganizerService();
     this.metadataService = new MetadataService(openaiApiKey, geminiApiKey);
+    this.memoryService = new MemoryService(organizeFolderPath);
     this.nlp = new NaturalLanguageProcessor(openaiApiKey);
     this.conversationManager = new ConversationManager();
     this.searchService = new EnhancedSmartSearchService(organizeFolderPath, openaiApiKey, geminiApiKey);
@@ -407,6 +410,24 @@ Just talk to me naturally - no special commands needed!`,
           
           if (!fileExists) {
             console.error(`❌ ERROR: File not found at expected location: ${organizationResult.newPath}`);
+          }
+          
+          // Update memory with the new document
+          if (metadataExists && organizationResult.metadataPath) {
+            console.log(`\n🧠 Updating memory with new document...`);
+            try {
+              // Read the metadata file
+              const metadataContent = fs.readFileSync(organizationResult.metadataPath, 'utf-8');
+              const metadata = JSON.parse(metadataContent);
+              
+              // Update memory
+              await this.memoryService.updateMemoryForDocument(organizationResult.newPath, metadata);
+              console.log(`✅ Memory updated successfully`);
+            } catch (memoryError) {
+              console.error(`❌ Failed to update memory:`, memoryError);
+              console.error(`   Document: ${organizationResult.newPath}`);
+              console.error(`   Metadata path: ${organizationResult.metadataPath}`);
+            }
           }
         }
         

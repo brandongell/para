@@ -25,7 +25,7 @@ export class MemoryService {
   constructor(organizedFolderPath: string) {
     this.organizedFolderPath = organizedFolderPath;
     // Memory directory is now inside the organized folder
-    this.memoryDir = path.join(organizedFolderPath, '_memory');
+    this.memoryDir = path.join(organizedFolderPath, 'memory');
     
     // Ensure memory directory exists
     if (!fs.existsSync(this.memoryDir)) {
@@ -918,18 +918,41 @@ export class MemoryService {
     await this.generateDocumentIndex(documents);
     
     // Update category-specific memory files based on document type
-    if (metadata.category === 'Finance_and_Investment') {
+    // Check for investment/finance documents
+    if (metadata.category === 'Finance_and_Investment' || 
+        metadata.category === 'Investment_Fundraising' ||
+        metadata.category?.includes('Investment') ||
+        metadata.category?.includes('Finance') ||
+        metadata.document_type?.includes('SAFE') ||
+        metadata.document_type?.includes('Investment')) {
       console.log(`💰 Updating financial memory files...`);
       await this.generateFinancialSummary(documents);
       await this.generateInvestorsAndCapTable(documents);
-    } else if (metadata.category === 'People_and_Employment') {
+      await this.generatePeopleDirectory(documents); // Also update people for investors
+    } 
+    // Check for employment/people documents
+    else if (metadata.category === 'People_and_Employment' || 
+             metadata.category === 'Employment' ||
+             metadata.category?.includes('Employment') ||
+             metadata.document_type?.includes('Employment') ||
+             metadata.document_type?.includes('Offer Letter')) {
       console.log(`👥 Updating people directory...`);
       await this.generatePeopleDirectory(documents);
       await this.generateEquityAndOptions(documents);
-    } else if (metadata.category === 'Corporate_and_Governance') {
+    } 
+    // Check for corporate documents
+    else if (metadata.category === 'Corporate_and_Governance' || 
+             metadata.category === 'Corporate' ||
+             metadata.category?.includes('Corporate') ||
+             metadata.category?.includes('Governance')) {
       console.log(`🏢 Updating corporate info...`);
       await this.generateCompanyInfo(documents);
       await this.generateLegalEntities(documents);
+    }
+    // For any document with signers, update people directory
+    else if (metadata.signers && metadata.signers.length > 0) {
+      console.log(`👥 Document has signers - updating people directory...`);
+      await this.generatePeopleDirectory(documents);
     }
     
     console.log(`✅ Memory update complete for ${path.basename(documentPath)}`);
