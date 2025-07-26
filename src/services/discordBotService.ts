@@ -300,6 +300,7 @@ export class DiscordBotService {
                 metadata.documenso = {
                   ...metadata.documenso,
                   documentId: templateLink.documentId,
+                  template_id: templateLink.documentId.toString(), // For now, use document ID as template ID
                   templateCreationUrl: templateLink.templateCreationUrl,
                   uploadedAt: new Date().toISOString(),
                   status: 'draft'
