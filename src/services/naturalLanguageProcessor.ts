@@ -83,14 +83,14 @@ export class NaturalLanguageProcessor {
     return `You are analyzing Discord messages to determine user intent for a legal document management system.
 
 POSSIBLE INTENTS:
-1. ORGANIZE_FILES - User wants to organize attached files or is uploading files
+1. ORGANIZE_FILES - User wants to organize attached files or is uploading files (ALWAYS use this when files are attached!)
 2. SEARCH_DOCUMENTS - User wants to find specific documents
 3. REQUEST_TEMPLATE - User specifically wants templates or blank forms
 4. GET_DOCUMENT_INFO - User wants details about a specific document
 5. LIST_DOCUMENTS - User wants to see documents by category/status
 6. GET_STATISTICS - User wants organizational stats or summaries
 7. HELP - User needs assistance or asks how to use the system
-8. UPLOAD_TO_DOCUMENSO - User wants to upload templates to Documenso for e-signatures
+8. UPLOAD_TO_DOCUMENSO - User wants to upload templates to Documenso for e-signatures (only when NO files are attached)
 9. SEND_TEMPLATE - User wants to send a template to someone for signature
 
 PARAMETER EXTRACTION:

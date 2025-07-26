@@ -92,6 +92,11 @@ export class DiscordBotService {
     this.organizer.setMetadataService(this.metadataService);
 
     // Initialize template services if Documenso credentials provided
+    console.log('🔍 Checking Documenso configuration...');
+    console.log(`  - API URL: ${documensoApiUrl ? `${documensoApiUrl}` : 'Missing'}`);
+    console.log(`  - API Token: ${documensoApiToken ? `${documensoApiToken.substring(0, 10)}...` : 'Missing'}`);
+    console.log(`  - App URL: ${documensoAppUrl || 'Using default'}`);
+    
     if (documensoApiUrl && documensoApiToken) {
       // Initialize template registry
       this.templateRegistry = new TemplateRegistryService(organizeFolderPath);
@@ -114,8 +119,10 @@ export class DiscordBotService {
       );
 
       console.log('📄 Documenso template workflow integration enabled');
+      console.log('✅ Template workflow service initialized');
     } else {
       console.log('⚠️  Documenso credentials not provided - template features disabled');
+      console.log('❌ Template workflow service NOT initialized');
     }
 
     this.setupEventHandlers(token);
@@ -200,6 +207,8 @@ export class DiscordBotService {
     const userId = message.author.id;
     let messageContent = message.content.trim();
     
+    console.log(`🔍 Context resolution - isInThread: ${isInThread}, contextId: ${contextId}, userId: ${userId}`);
+    
     // Remove mention from message content for better NLP processing
     if (isMentioned) {
       messageContent = messageContent.replace(/<@!?\d+>/g, '').trim();
@@ -211,8 +220,22 @@ export class DiscordBotService {
         await message.channel.sendTyping();
       }
 
-      // Get conversation context
-      const context = await this.conversationManager.getContext(contextId);
+      // Get conversation context - check both thread and user context
+      let context = await this.conversationManager.getContext(contextId);
+      console.log(`📋 Retrieved context for ${contextId}:`, context ? `Found with ${context.pendingTemplateUploads?.length || 0} pending uploads` : 'No context found');
+      
+      // If we're in a thread and didn't find context, also check user context
+      // This handles the case where context was stored before thread creation
+      if (isInThread && (!context || !context.pendingTemplateUploads)) {
+        const userContext = await this.conversationManager.getContext(userId);
+        console.log(`📋 Also checking user context for ${userId}:`, userContext ? `Found with ${userContext?.pendingTemplateUploads?.length || 0} pending uploads` : 'No user context found');
+        
+        // If user context has pending uploads, use that
+        if (userContext?.pendingTemplateUploads && userContext.pendingTemplateUploads.length > 0) {
+          context = userContext;
+          console.log(`🔄 Using user context with pending uploads instead of thread context`);
+        }
+      }
 
       // Resolve contextual references if we have context
       let resolvedMessage = messageContent;
@@ -227,9 +250,14 @@ export class DiscordBotService {
       // Check if user has pending template uploads and is confirming
       if (context?.pendingTemplateUploads && context.pendingTemplateUploads.length > 0) {
         const lowerMessage = messageContent.toLowerCase();
+        console.log(`🎯 Found ${context.pendingTemplateUploads.length} pending template uploads`);
+        console.log(`📄 Pending templates:`, context.pendingTemplateUploads.map(t => t.filename));
+        
         if (lowerMessage === 'yes' || lowerMessage.includes('upload') && lowerMessage.includes('documenso')) {
           // User confirmed - process template uploads
           console.log(`📄 User confirmed template upload to Documenso`);
+          console.log(`🔧 Template workflow available: ${!!this.templateWorkflow}`);
+          console.log(`🔧 Documenso service available: ${!!this.templateWorkflow?.getDocumensoService()}`);
           
           // Check if Documenso is configured
           if (!this.templateWorkflow) {
@@ -318,6 +346,16 @@ export class DiscordBotService {
           // Clear pending uploads from context
           context.pendingTemplateUploads = undefined;
           await this.conversationManager.setContext(contextId, context);
+          
+          // Also clear from user context if we're in a thread
+          if (isInThread) {
+            const userContext = await this.conversationManager.getContext(userId);
+            if (userContext?.pendingTemplateUploads) {
+              userContext.pendingTemplateUploads = undefined;
+              await this.conversationManager.setContext(userId, userContext);
+              console.log(`🧹 Also cleared pending uploads from user context`);
+            }
+          }
           
           // Don't reply directly - let it go through the thread creation flow
           const uploadResponse: BotResponse = {
@@ -536,12 +574,17 @@ export class DiscordBotService {
           break;
 
         case 'UPLOAD_TO_DOCUMENSO':
-          // if (!this.templateService) {
+          if (!this.templateWorkflow) {
             response = {
-              content: "⚠️ Documenso integration is temporarily disabled for debugging.",
+              content: "❌ Documenso integration is not configured. Please contact an administrator.",
               followUpSuggestions: ["Search for templates", "Get help"]
             };
-          // }
+          } else {
+            response = {
+              content: "To upload templates to Documenso, please upload your template files and I'll guide you through the process.",
+              followUpSuggestions: ["Upload a template file", "Search for existing templates"]
+            };
+          }
           break;
         case 'SEND_TEMPLATE':
           if (!this.templateWorkflow) {
@@ -618,6 +661,7 @@ Just talk to me naturally - no special commands needed!`,
       // Add pending templates to context if we detected any and asked about uploading
       if (pendingTemplates.length > 0 && response.content.includes('Would you like me to upload')) {
         updatedContext.pendingTemplateUploads = pendingTemplates;
+        console.log(`💾 Storing ${pendingTemplates.length} pending templates in context ID: ${contextId}`);
         this.conversationManager.setContext(contextId, updatedContext);
       }
 
