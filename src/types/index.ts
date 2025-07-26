@@ -129,12 +129,13 @@ export interface MetadataExtractionResult {
 }
 
 export interface BotIntent {
-  type: 'ORGANIZE_FILES' | 'SEARCH_DOCUMENTS' | 'REQUEST_TEMPLATE' | 'GET_DOCUMENT_INFO' | 'LIST_DOCUMENTS' | 'GET_STATISTICS' | 'HELP' | 'UPLOAD_TO_DOCUMENSO' | 'SEND_TEMPLATE' | 'UNKNOWN';
+  type: 'ORGANIZE_FILES' | 'SEARCH_DOCUMENTS' | 'REQUEST_TEMPLATE' | 'GET_DOCUMENT_INFO' | 'LIST_DOCUMENTS' | 'GET_STATISTICS' | 'HELP' | 'UPLOAD_TO_DOCUMENSO' | 'SEND_TEMPLATE' | 'UPDATE_TEMPLATE_ID' | 'UNKNOWN';
   confidence: number;
   parameters: {
     document_type?: string;
     template_type?: string;
     template_name?: string;
+    template_id?: string;
     recipient_email?: string;
     recipient_name?: string;
     status?: string;

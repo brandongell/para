@@ -92,6 +92,7 @@ POSSIBLE INTENTS:
 7. HELP - User needs assistance or asks how to use the system
 8. UPLOAD_TO_DOCUMENSO - User wants to upload templates to Documenso for e-signatures (only when NO files are attached)
 9. SEND_TEMPLATE - User wants to send a template to someone for signature
+10. UPDATE_TEMPLATE_ID - User wants to update a template with its Documenso template ID
 
 PARAMETER EXTRACTION:
 For each intent, extract relevant parameters:
@@ -155,6 +156,17 @@ Send template indicators:
 - "prepare [template] for [name/email]"
 - "[name/email] needs to sign the [template]"
 
+UPDATE_TEMPLATE_ID parameters:
+- template_name: Name or type of template to update (e.g., "MNDA", "employment agreement")
+- template_id: The Documenso template ID (numeric)
+
+Update template ID indicators:
+- "update template [name] with ID [number]"
+- "set template ID for [name] to [number]"
+- "[template] template ID is [number]"
+- "the [template] has template ID [number]"
+- "template [name] is now [number]"
+
 CONTEXT AWARENESS:
 - If user has previous search results, they might be asking follow-up questions
 - Consider conversation flow for better intent detection
@@ -186,6 +198,8 @@ EXAMPLES:
 "Send John Smith the employment agreement" → SEND_TEMPLATE
 "I need to send a SAFE to investor@vc.com" → SEND_TEMPLATE
 "Can you send the NDA to our new vendor?" → SEND_TEMPLATE
+"Update template MNDA with ID 5561" → UPDATE_TEMPLATE_ID
+"The MNDA template ID is 5561" → UPDATE_TEMPLATE_ID
 "What is our EIN number?" → SEARCH_DOCUMENTS (query: "EIN number")
 "How much revenue do we have?" → SEARCH_DOCUMENTS (query: "revenue")
 "Who invested in our company?" → SEARCH_DOCUMENTS (query: "investors")`;

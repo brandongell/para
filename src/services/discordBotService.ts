@@ -300,10 +300,12 @@ export class DiscordBotService {
                 metadata.documenso = {
                   ...metadata.documenso,
                   documentId: templateLink.documentId,
-                  template_id: templateLink.documentId.toString(), // For now, use document ID as template ID
+                  draft_document_id: templateLink.documentId, // Store draft ID separately
+                  // template_id will be set later when user provides the actual template ID
                   templateCreationUrl: templateLink.templateCreationUrl,
                   uploadedAt: new Date().toISOString(),
-                  status: 'draft'
+                  status: 'draft_uploaded',
+                  notes: 'Document uploaded as draft. Awaiting manual conversion to template in Documenso UI.'
                 };
                 fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
                 console.log(`✅ Updated metadata with Documenso info for ${template.filename}`);
@@ -317,7 +319,7 @@ export class DiscordBotService {
               uploadResults.push(
                 `✅ **${template.filename}**\n` +
                 `   📄 Document ID: ${templateLink.documentId}\n` +
-                `   🔗 [Configure Template Fields](${templateLink.templateCreationUrl})`
+                `   🔗 [View Document in Documenso](${templateLink.templateCreationUrl})`
               );
               
             } catch (error) {
@@ -328,16 +330,21 @@ export class DiscordBotService {
           }
           
           // Build response
-          let responseContent = '📄 **Documenso Template Upload Results**\n\n';
+          let responseContent = '📄 **Documenso Document Upload Results**\n\n';
           
           if (uploadResults.length > 0) {
             responseContent += uploadResults.join('\n\n') + '\n\n';
-            responseContent += '**Next Steps:**\n';
-            responseContent += '1. Click the links above to configure template fields in Documenso\n';
-            responseContent += '2. Once configured, you can send templates using commands like:\n';
-            responseContent += '   • "Send the MNDA to john@example.com"\n';
-            responseContent += '   • "Send employment agreement to new.hire@company.com"\n\n';
-            responseContent += '💡 **Tip:** Template configuration includes setting up signature fields, text fields, and recipient roles.';
+            responseContent += '⚠️ **Important:** Documenso API creates drafts, not templates!\n\n';
+            responseContent += '**To Convert to Reusable Template:**\n';
+            responseContent += '1. Click the link above to open your document draft\n';
+            responseContent += '2. Add signature fields, text fields, and configure recipients\n';
+            responseContent += '3. Click "Save as Template" or similar option in Documenso\n';
+            responseContent += '4. The template will get a new ID (like your template 5561)\n\n';
+            responseContent += '**After Creating Template:**\n';
+            responseContent += '1. Note your template ID from the URL (e.g., /templates/5561/)\n';
+            responseContent += '2. Update our records with: "@Para update template MNDA with ID 5561"\n';
+            responseContent += '3. Then send it with: "Send the MNDA to john@example.com"\n\n';
+            responseContent += '💡 **Why?** Documenso\'s API only creates one-time documents. Templates must be created through their UI.';
           }
           
           if (failedUploads.length > 0) {
@@ -604,6 +611,74 @@ export class DiscordBotService {
               content: workflowResponse.message,
               embeds: workflowResponse.embed ? [workflowResponse.embed] : undefined
             };
+          }
+          break;
+
+        case 'UPDATE_TEMPLATE_ID':
+          const { template_name, template_id } = intent.parameters;
+          
+          if (!template_name || !template_id) {
+            response = {
+              content: "Please specify both template name and ID. Example: 'Update template MNDA with ID 5561'",
+              followUpSuggestions: ["Show all templates", "Help"]
+            };
+          } else {
+            // Find matching templates
+            const templates = this.templateRegistry ? await this.templateRegistry.findTemplates(template_name) : [];
+            
+            if (templates.length === 0) {
+              response = {
+                content: `❌ No template found matching "${template_name}"`,
+                followUpSuggestions: ["Show all templates", "Upload a template"]
+              };
+            } else if (templates.length > 1) {
+              response = {
+                content: `🤔 Found ${templates.length} templates matching "${template_name}". Please be more specific.`,
+                followUpSuggestions: templates.map(t => `Update "${t.metadata.filename}" with ID ${template_id}`)
+              };
+            } else {
+              // Update the template's metadata
+              const template = templates[0];
+              const metadataPath = template.filePath + '.metadata.json';
+              
+              try {
+                const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+                metadata.documenso = {
+                  ...metadata.documenso,
+                  template_id: template_id.toString(),
+                  status: 'template_ready',
+                  template_created_at: new Date().toISOString()
+                };
+                
+                fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+                
+                // Refresh template registry
+                if (this.templateRegistry) {
+                  await this.templateRegistry.refreshRegistry();
+                }
+                
+                response = {
+                  content: `✅ **Template Updated!**\n\n` +
+                          `📄 **${template.metadata.filename}**\n` +
+                          `🆔 Template ID: ${template_id}\n` +
+                          `✨ Status: Ready to send\n\n` +
+                          `You can now send this template with:\n` +
+                          `• "Send the ${template_name} to john@example.com"\n` +
+                          `• "Send ${template_name} to multiple recipients"`,
+                  followUpSuggestions: [
+                    `Send the ${template_name} to someone`,
+                    "Show all templates",
+                    "Upload another template"
+                  ]
+                };
+              } catch (error) {
+                console.error('Failed to update template metadata:', error);
+                response = {
+                  content: `❌ Failed to update template: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                  followUpSuggestions: ["Show all templates", "Help"]
+                };
+              }
+            }
           }
           break;
 
@@ -967,6 +1042,9 @@ Just talk to me naturally - no special commands needed!`,
           break;
         case 'SEND_TEMPLATE':
           threadName += 'Send Template';
+          break;
+        case 'UPDATE_TEMPLATE_ID':
+          threadName += 'Update Template ID';
           break;
         case 'HELP':
           threadName += 'Help';
