@@ -1,11 +1,15 @@
 # People Directory
-Last Updated: 2025-07-24T12:49:37.315Z
+Last Updated: 2025-07-26T02:12:50.390Z
 
 ## Quick Facts
-- Total people in directory: 13 (Source: All documents)
+- Total people in directory: 14 (Source: All documents)
 
 ## Employees
 - W. Daniel Shipper - Employee [Source: Every Media - PIIA (D. Shipper) EXECUTED.pdf]
+
+## Advisors
+- Dan Shipper [Source: Multiple documents]
+- Paul Smalera - Advisor (p@smalera.com) [Source: LEGAL_47585153v1_Every_Media_-_Advisor_Offer_Letter_P._Smalera_copy_1.pdf]
 
 ## Investors
 - Austin Rief (austin@morningbrew.com) [Source: Austin Rief.pdf]
