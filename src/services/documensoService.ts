@@ -77,18 +77,21 @@ export class DocumensoService {
 
   /**
    * Upload a document to Documenso as a draft for template creation
+   * Note: Documenso doesn't have a direct API to create templates.
+   * Documents must be uploaded as drafts and manually converted to templates in the UI.
    */
   async uploadDocumentForTemplate(
     filePath: string,
     metadata: DocumentMetadata
   ): Promise<DocumensoUploadResponse> {
     try {
-      console.log('📤 Uploading document to Documenso for template creation...');
+      console.log('📤 Uploading document to Documenso as draft (will need manual conversion to template)...');
       
       const fileName = path.basename(filePath);
       const title = this.generateTemplateTitle(metadata);
       
       // Step 1: Create document metadata
+      // Note: This creates a DRAFT document, not a template
       const createPayload = {
         title: title,
         recipients: [
@@ -156,8 +159,9 @@ export class DocumensoService {
    */
   generateTemplateCreationLink(documentId: number): DocumensoTemplateLink {
     // Generate link to Documenso's template creation interface
-    // This assumes Documenso has a UI route for converting documents to templates
-    const templateCreationUrl = `${this.config.appUrl}/documents/${documentId}/convert-to-template`;
+    // Documenso uses /documents/{id} to view/edit documents
+    // The user can convert to template from the document page
+    const templateCreationUrl = `${this.config.appUrl}/documents/${documentId}`;
     
     return {
       documentId,
@@ -382,49 +386,41 @@ export class DocumensoService {
     }>;
   }> {
     try {
-      // Create document from template
-      const createResult = await this.createDocumentFromTemplate(templateId, recipients, formValues);
-      
-      // Send the document for signing
-      if (createResult.status === 'DRAFT') {
-        const sendPayload = {
-          subject: options?.subject || 'Please sign this document',
-          message: options?.message || 'You have been requested to sign this document.',
-          sendDocument: true
-        };
+      // Use the correct endpoint that actually works
+      const payload = {
+        title: options?.title || `Document from template ${templateId}`,
+        recipients: recipients.map((r, index) => ({
+          id: index + 1, // Required by API
+          name: r.name,
+          email: r.email,
+          role: 'SIGNER',
+          signingOrder: r.signingOrder || null
+        }))
+      };
 
-        const sendResponse = await fetch(
-          `${this.config.apiUrl}/api/v1/documents/${createResult.documentId}/send`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': this.config.apiToken,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(sendPayload)
-          }
-        );
-
-        if (!sendResponse.ok) {
-          const errorText = await sendResponse.text();
-          throw new Error(`Failed to send document: ${sendResponse.status} - ${errorText}`);
+      const response = await fetch(
+        `${this.config.apiUrl}/api/v1/templates/${templateId}/create-document`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': this.config.apiToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
         }
+      );
 
-        const sendResult = await sendResponse.json();
-        
-        return {
-          documentId: createResult.documentId,
-          recipients: (sendResult as any)?.recipients || createResult.recipients?.map((r: any) => ({
-            email: r.email,
-            signingUrl: r.signingUrl
-          })) || []
-        };
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to create document from template: ${response.status} - ${errorText}`);
       }
 
-      // Document was already sent
+      const result = await response.json() as any;
+      
+      // The create-document endpoint already sends the document
       return {
-        documentId: createResult.documentId,
-        recipients: createResult.recipients?.map((r: any) => ({
+        documentId: result.documentId,
+        recipients: result.recipients?.map((r: any) => ({
           email: r.email,
           signingUrl: r.signingUrl
         })) || []

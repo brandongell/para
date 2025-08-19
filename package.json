@@ -5,8 +5,10 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node dist/server.js",
+    "start:cli": "node dist/index.js",
     "dev": "ts-node src/index.ts",
+    "dev:server": "ts-node src/server.ts",
     "discord": "ts-node src/discord-bot.ts",
     "monitor": "ts-node src/monitor.ts",
     "oauth-server": "ts-node src/oauth-callback-server.ts",
@@ -44,6 +46,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.57.0",
+    "@google-cloud/local-auth": "^3.0.1",
     "@google/generative-ai": "^0.24.1",
     "@types/express": "^5.0.3",
     "@types/form-data": "^2.2.1",
@@ -53,6 +56,7 @@
     "dotenv": "^16.3.0",
     "express": "^5.1.0",
     "form-data": "^4.0.4",
+    "googleapis": "^154.1.0",
     "mammoth": "^1.6.0",
     "node-fetch": "^3.3.0",
     "openai": "^4.0.0",

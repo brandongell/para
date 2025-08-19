@@ -24,6 +24,16 @@ class LegalDocumentOrganizer {
 
   async run(): Promise<void> {
     try {
+      // Check operation mode
+      const mode = process.env.MODE || 'local';
+      
+      if (mode === 'google-drive') {
+        this.cli.displayError('Google Drive mode should be run using the server');
+        this.cli.displayInfo('Please run: npm run start');
+        this.cli.displayInfo('Or for development: npm run dev:server');
+        process.exit(0);
+      }
+      
       this.cli.displayWelcome();
       
       // Check for API keys

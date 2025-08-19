@@ -44,8 +44,11 @@ class DiscordBotRunner {
       if (documensoApiUrl && documensoApiToken) {
         console.log('📄 Documenso API configured - template upload enabled');
         console.log(`   URL: ${documensoApiUrl}`);
+        console.log(`   Token: ${documensoApiToken.substring(0, 10)}...`);
       } else {
         console.log('⚠️  Documenso credentials not found - template upload features disabled');
+        console.log(`   URL present: ${!!documensoApiUrl}`);
+        console.log(`   Token present: ${!!documensoApiToken}`);
       }
 
       // Initialize and start the bot

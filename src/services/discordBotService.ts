@@ -92,6 +92,11 @@ export class DiscordBotService {
     this.organizer.setMetadataService(this.metadataService);
 
     // Initialize template services if Documenso credentials provided
+    console.log('🔍 Checking Documenso configuration...');
+    console.log(`  - API URL: ${documensoApiUrl ? `${documensoApiUrl}` : 'Missing'}`);
+    console.log(`  - API Token: ${documensoApiToken ? `${documensoApiToken.substring(0, 10)}...` : 'Missing'}`);
+    console.log(`  - App URL: ${documensoAppUrl || 'Using default'}`);
+    
     if (documensoApiUrl && documensoApiToken) {
       // Initialize template registry
       this.templateRegistry = new TemplateRegistryService(organizeFolderPath);
@@ -114,8 +119,10 @@ export class DiscordBotService {
       );
 
       console.log('📄 Documenso template workflow integration enabled');
+      console.log('✅ Template workflow service initialized');
     } else {
       console.log('⚠️  Documenso credentials not provided - template features disabled');
+      console.log('❌ Template workflow service NOT initialized');
     }
 
     this.setupEventHandlers(token);
@@ -200,6 +207,8 @@ export class DiscordBotService {
     const userId = message.author.id;
     let messageContent = message.content.trim();
     
+    console.log(`🔍 Context resolution - isInThread: ${isInThread}, contextId: ${contextId}, userId: ${userId}`);
+    
     // Remove mention from message content for better NLP processing
     if (isMentioned) {
       messageContent = messageContent.replace(/<@!?\d+>/g, '').trim();
@@ -211,8 +220,22 @@ export class DiscordBotService {
         await message.channel.sendTyping();
       }
 
-      // Get conversation context
-      const context = await this.conversationManager.getContext(contextId);
+      // Get conversation context - check both thread and user context
+      let context = await this.conversationManager.getContext(contextId);
+      console.log(`📋 Retrieved context for ${contextId}:`, context ? `Found with ${context.pendingTemplateUploads?.length || 0} pending uploads` : 'No context found');
+      
+      // If we're in a thread and didn't find context, also check user context
+      // This handles the case where context was stored before thread creation
+      if (isInThread && (!context || !context.pendingTemplateUploads)) {
+        const userContext = await this.conversationManager.getContext(userId);
+        console.log(`📋 Also checking user context for ${userId}:`, userContext ? `Found with ${userContext?.pendingTemplateUploads?.length || 0} pending uploads` : 'No user context found');
+        
+        // If user context has pending uploads, use that
+        if (userContext?.pendingTemplateUploads && userContext.pendingTemplateUploads.length > 0) {
+          context = userContext;
+          console.log(`🔄 Using user context with pending uploads instead of thread context`);
+        }
+      }
 
       // Resolve contextual references if we have context
       let resolvedMessage = messageContent;
@@ -227,9 +250,14 @@ export class DiscordBotService {
       // Check if user has pending template uploads and is confirming
       if (context?.pendingTemplateUploads && context.pendingTemplateUploads.length > 0) {
         const lowerMessage = messageContent.toLowerCase();
+        console.log(`🎯 Found ${context.pendingTemplateUploads.length} pending template uploads`);
+        console.log(`📄 Pending templates:`, context.pendingTemplateUploads.map(t => t.filename));
+        
         if (lowerMessage === 'yes' || lowerMessage.includes('upload') && lowerMessage.includes('documenso')) {
           // User confirmed - process template uploads
           console.log(`📄 User confirmed template upload to Documenso`);
+          console.log(`🔧 Template workflow available: ${!!this.templateWorkflow}`);
+          console.log(`🔧 Documenso service available: ${!!this.templateWorkflow?.getDocumensoService()}`);
           
           // Check if Documenso is configured
           if (!this.templateWorkflow) {
@@ -272,9 +300,12 @@ export class DiscordBotService {
                 metadata.documenso = {
                   ...metadata.documenso,
                   documentId: templateLink.documentId,
+                  draft_document_id: templateLink.documentId, // Store draft ID separately
+                  // template_id will be set later when user provides the actual template ID
                   templateCreationUrl: templateLink.templateCreationUrl,
                   uploadedAt: new Date().toISOString(),
-                  status: 'draft'
+                  status: 'draft_uploaded',
+                  notes: 'Document uploaded as draft. Awaiting manual conversion to template in Documenso UI.'
                 };
                 fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
                 console.log(`✅ Updated metadata with Documenso info for ${template.filename}`);
@@ -288,7 +319,7 @@ export class DiscordBotService {
               uploadResults.push(
                 `✅ **${template.filename}**\n` +
                 `   📄 Document ID: ${templateLink.documentId}\n` +
-                `   🔗 [Configure Template Fields](${templateLink.templateCreationUrl})`
+                `   🔗 [View Document in Documenso](${templateLink.templateCreationUrl})`
               );
               
             } catch (error) {
@@ -299,16 +330,21 @@ export class DiscordBotService {
           }
           
           // Build response
-          let responseContent = '📄 **Documenso Template Upload Results**\n\n';
+          let responseContent = '📄 **Documenso Document Upload Results**\n\n';
           
           if (uploadResults.length > 0) {
             responseContent += uploadResults.join('\n\n') + '\n\n';
-            responseContent += '**Next Steps:**\n';
-            responseContent += '1. Click the links above to configure template fields in Documenso\n';
-            responseContent += '2. Once configured, you can send templates using commands like:\n';
-            responseContent += '   • "Send the MNDA to john@example.com"\n';
-            responseContent += '   • "Send employment agreement to new.hire@company.com"\n\n';
-            responseContent += '💡 **Tip:** Template configuration includes setting up signature fields, text fields, and recipient roles.';
+            responseContent += '⚠️ **Important:** Documenso API creates drafts, not templates!\n\n';
+            responseContent += '**To Convert to Reusable Template:**\n';
+            responseContent += '1. Click the link above to open your document draft\n';
+            responseContent += '2. Add signature fields, text fields, and configure recipients\n';
+            responseContent += '3. Click "Save as Template" or similar option in Documenso\n';
+            responseContent += '4. The template will get a new ID (like your template 5561)\n\n';
+            responseContent += '**After Creating Template:**\n';
+            responseContent += '1. Note your template ID from the URL (e.g., /templates/5561/)\n';
+            responseContent += '2. Update our records with: "@Para update template MNDA with ID 5561"\n';
+            responseContent += '3. Then send it with: "Send the MNDA to john@example.com"\n\n';
+            responseContent += '💡 **Why?** Documenso\'s API only creates one-time documents. Templates must be created through their UI.';
           }
           
           if (failedUploads.length > 0) {
@@ -318,6 +354,16 @@ export class DiscordBotService {
           // Clear pending uploads from context
           context.pendingTemplateUploads = undefined;
           await this.conversationManager.setContext(contextId, context);
+          
+          // Also clear from user context if we're in a thread
+          if (isInThread) {
+            const userContext = await this.conversationManager.getContext(userId);
+            if (userContext?.pendingTemplateUploads) {
+              userContext.pendingTemplateUploads = undefined;
+              await this.conversationManager.setContext(userId, userContext);
+              console.log(`🧹 Also cleared pending uploads from user context`);
+            }
+          }
           
           // Don't reply directly - let it go through the thread creation flow
           const uploadResponse: BotResponse = {
@@ -536,12 +582,17 @@ export class DiscordBotService {
           break;
 
         case 'UPLOAD_TO_DOCUMENSO':
-          // if (!this.templateService) {
+          if (!this.templateWorkflow) {
             response = {
-              content: "⚠️ Documenso integration is temporarily disabled for debugging.",
+              content: "❌ Documenso integration is not configured. Please contact an administrator.",
               followUpSuggestions: ["Search for templates", "Get help"]
             };
-          // }
+          } else {
+            response = {
+              content: "To upload templates to Documenso, please upload your template files and I'll guide you through the process.",
+              followUpSuggestions: ["Upload a template file", "Search for existing templates"]
+            };
+          }
           break;
         case 'SEND_TEMPLATE':
           if (!this.templateWorkflow) {
@@ -560,6 +611,74 @@ export class DiscordBotService {
               content: workflowResponse.message,
               embeds: workflowResponse.embed ? [workflowResponse.embed] : undefined
             };
+          }
+          break;
+
+        case 'UPDATE_TEMPLATE_ID':
+          const { template_name, template_id } = intent.parameters;
+          
+          if (!template_name || !template_id) {
+            response = {
+              content: "Please specify both template name and ID. Example: 'Update template MNDA with ID 5561'",
+              followUpSuggestions: ["Show all templates", "Help"]
+            };
+          } else {
+            // Find matching templates
+            const templates = this.templateRegistry ? await this.templateRegistry.findTemplates(template_name) : [];
+            
+            if (templates.length === 0) {
+              response = {
+                content: `❌ No template found matching "${template_name}"`,
+                followUpSuggestions: ["Show all templates", "Upload a template"]
+              };
+            } else if (templates.length > 1) {
+              response = {
+                content: `🤔 Found ${templates.length} templates matching "${template_name}". Please be more specific.`,
+                followUpSuggestions: templates.map(t => `Update "${t.metadata.filename}" with ID ${template_id}`)
+              };
+            } else {
+              // Update the template's metadata
+              const template = templates[0];
+              const metadataPath = template.filePath + '.metadata.json';
+              
+              try {
+                const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+                metadata.documenso = {
+                  ...metadata.documenso,
+                  template_id: template_id.toString(),
+                  status: 'template_ready',
+                  template_created_at: new Date().toISOString()
+                };
+                
+                fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+                
+                // Refresh template registry
+                if (this.templateRegistry) {
+                  await this.templateRegistry.refreshRegistry();
+                }
+                
+                response = {
+                  content: `✅ **Template Updated!**\n\n` +
+                          `📄 **${template.metadata.filename}**\n` +
+                          `🆔 Template ID: ${template_id}\n` +
+                          `✨ Status: Ready to send\n\n` +
+                          `You can now send this template with:\n` +
+                          `• "Send the ${template_name} to john@example.com"\n` +
+                          `• "Send ${template_name} to multiple recipients"`,
+                  followUpSuggestions: [
+                    `Send the ${template_name} to someone`,
+                    "Show all templates",
+                    "Upload another template"
+                  ]
+                };
+              } catch (error) {
+                console.error('Failed to update template metadata:', error);
+                response = {
+                  content: `❌ Failed to update template: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                  followUpSuggestions: ["Show all templates", "Help"]
+                };
+              }
+            }
           }
           break;
 
@@ -618,6 +737,7 @@ Just talk to me naturally - no special commands needed!`,
       // Add pending templates to context if we detected any and asked about uploading
       if (pendingTemplates.length > 0 && response.content.includes('Would you like me to upload')) {
         updatedContext.pendingTemplateUploads = pendingTemplates;
+        console.log(`💾 Storing ${pendingTemplates.length} pending templates in context ID: ${contextId}`);
         this.conversationManager.setContext(contextId, updatedContext);
       }
 
@@ -922,6 +1042,9 @@ Just talk to me naturally - no special commands needed!`,
           break;
         case 'SEND_TEMPLATE':
           threadName += 'Send Template';
+          break;
+        case 'UPDATE_TEMPLATE_ID':
+          threadName += 'Update Template ID';
           break;
         case 'HELP':
           threadName += 'Help';
